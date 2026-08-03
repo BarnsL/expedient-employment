@@ -1,0 +1,20 @@
+{
+  "country": "us",
+  "language": "en",
+  "results_per_query": 8,
+  "queries": [
+    "\"recruiting coordinator\" (remote OR \"United States\") job",
+    "\"recruiting operations coordinator\" job",
+    "\"talent operations coordinator\" job",
+    "\"candidate experience coordinator\" job",
+    "\"people operations coordinator\" job"
+  ],
+  "preferred_job_domains": [
+    "boards.greenhouse.io",
+    "job-boards.greenhouse.io",
+    "jobs.lever.co",
+    "jobs.ashbyhq.com",
+    "myworkdayjobs.com",
+    "careers.smartrecruiters.com"
+  ]
+}

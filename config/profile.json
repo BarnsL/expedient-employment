@@ -1,0 +1,76 @@
+{
+  "candidate": {
+    "name": "Alex Rivera",
+    "location": "San Francisco, CA",
+    "summary": "Recruiting operations professional with experience coordinating high-volume interview loops, managing applicant tracking systems, and improving candidate experience. Replace this summary, the roles, locations, skills, and evidence below with your own background. You can edit this file from the GUI Settings page or in any text editor.",
+    "years_experience": 3,
+    "target_roles": [
+      "Recruiting Coordinator",
+      "Recruiting Operations Coordinator",
+      "Talent Operations Coordinator",
+      "Candidate Experience Coordinator",
+      "People Operations Coordinator"
+    ],
+    "preferred_locations": [
+      "Remote",
+      "San Francisco",
+      "Oakland",
+      "San Jose"
+    ],
+    "accepted_work_modes": ["remote", "hybrid", "onsite"],
+    "skills": [
+      "interview scheduling",
+      "applicant tracking systems",
+      "candidate communication",
+      "recruiting coordination",
+      "onboarding coordination",
+      "calendar management",
+      "data entry",
+      "reporting"
+    ],
+    "responsibility_keywords": [
+      "schedule interviews",
+      "coordinate interview loops",
+      "manage applicant tracking system",
+      "communicate with candidates",
+      "support onboarding",
+      "maintain recruiting reports"
+    ],
+    "evidence": [
+      {
+        "skill": "interview scheduling",
+        "evidence": "Coordinated multi-panel interview loops across time zones for a high-volume hiring team."
+      },
+      {
+        "skill": "applicant tracking systems",
+        "evidence": "Maintained accurate candidate pipelines and stage data in a shared ATS."
+      }
+    ],
+    "exclude_title_terms": [
+      "vice president",
+      "chief",
+      "head of",
+      "director",
+      "physician",
+      "nurse",
+      "sales representative",
+      "account executive"
+    ]
+  },
+  "scoring": {
+    "strong_fit_threshold": 72,
+    "weights": {
+      "title": 0.35,
+      "skills": 0.3,
+      "experience": 0.15,
+      "location": 0.1,
+      "responsibilities": 0.1
+    },
+    "ai_blend_weight": 0.3
+  },
+  "source": {
+    "resume_file_name": "resume.docx",
+    "profile_generated_on": "2026-01-01",
+    "contact_details_included": false
+  }
+}
