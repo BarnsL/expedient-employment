@@ -151,7 +151,7 @@ const DEMO_SERVICES: ServicesMap = {
 const DEMO_JOBS: JobRow[] = [
   {
     score: '92', fit_label: 'Strong Fit', title: 'Senior Recruiting Coordinator',
-    company: 'Acme Talent', location: 'San Francisco, CA', work_mode: 'Hybrid',
+    company: 'ExampleCo Talent', location: 'San Francisco, CA', work_mode: 'Hybrid',
     salary: '$85k-$105k', matched_skills: 'scheduling; ATS; sourcing',
     gaps: 'greenhouse', url: 'https://example.com/job/1',
   },

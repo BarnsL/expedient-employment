@@ -361,8 +361,8 @@ index 68dd1a2..dbe9a33 100644
        }
  
        bMenu.appendChild(menuSep());
--      bMenu.appendChild(menuBtn('ℹ️ About SMAB', '', () => createTab('https://github.com/BarnsL/Social-Media-Agent-Browser')));
-+      bMenu.appendChild(menuBtn('ℹ️ About Agent Web Browser', '', () => createTab('https://github.com/BarnsL/Social-Media-Agent-Browser')));
+-      bMenu.appendChild(menuBtn('ℹ️ About SMAB', '', () => createTab('https://github.com/BarnsL/Agent-Web-Browser')));
++      bMenu.appendChild(menuBtn('ℹ️ About Agent Web Browser', '', () => createTab('https://github.com/BarnsL/Agent-Web-Browser')));
      }
 -    document.getElementById('btn-menu').onclick = async (e) => { e.stopPropagation(); const open = bMenu.classList.contains('open'); closeAllMenus(); if (!open) { await buildMenu(); bMenu.classList.add('open'); } };
 +    document.getElementById('btn-menu').onclick = async (e) => { e.stopPropagation(); const open = bMenu.classList.contains('open'); closeAllMenus(); if (!open) { await buildMenu(); bMenu.classList.add('open'); expandChromeFor(bMenu); } };

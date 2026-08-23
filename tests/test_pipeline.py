@@ -83,14 +83,14 @@ class PipelineTests(unittest.TestCase):
             "structured_data": [{
                 "@type": "JobPosting",
                 "title": "Recruiting Coordinator",
-                "hiringOrganization": {"name": "Acme"},
+                "hiringOrganization": {"name": "ExampleCo"},
                 "jobLocation": {"address": {"addressLocality": "San Jose", "addressRegion": "CA"}},
                 "datePosted": "2026-07-18"
             }],
         }
         job = normalize_webclaw_job("https://example.test/job/1", payload)
         self.assertEqual(job.title, "Recruiting Coordinator")
-        self.assertEqual(job.company, "Acme")
+        self.assertEqual(job.company, "ExampleCo")
         self.assertIn("San Jose", job.location)
 
     def test_greenhouse_fallbacks_recover_company_and_location(self) -> None:
@@ -231,9 +231,9 @@ class PipelineTests(unittest.TestCase):
                 return [{
                     "site": "indeed",
                     "title": "Recruiting Coordinator",
-                    "company": "Acme",
+                    "company": "ExampleCo",
                     "job_url": "https://www.indeed.com/viewjob?jk=123&utm_source=test",
-                    "job_url_direct": "https://jobs.acme.test/recruiting-coordinator",
+                    "job_url_direct": "https://jobs.exampleco.test/recruiting-coordinator",
                     "location": "San Jose, CA",
                     "description": "About the role. Responsibilities and qualifications. " * 8,
                     "date_posted": "2026-07-20",
@@ -251,7 +251,7 @@ class PipelineTests(unittest.TestCase):
         )
         self.assertEqual(len(jobs), 1)
         self.assertEqual(jobs[0].source, "jobspy:indeed")
-        self.assertEqual(jobs[0].url, "https://jobs.acme.test/recruiting-coordinator")
+        self.assertEqual(jobs[0].url, "https://jobs.exampleco.test/recruiting-coordinator")
         self.assertEqual(calls[0]["hours_old"], 168)
         self.assertEqual(calls[0]["site_name"], ["indeed"])
         self.assertEqual(source.last_diagnostics["result_counts_by_site"], {"indeed": 1})
@@ -379,11 +379,11 @@ class PipelineTests(unittest.TestCase):
 
     def test_webclaw_fallback_resolves_and_verifies_employer_page(self) -> None:
         """Turn an indexed board result into a validated direct ATS posting."""
-        board_url = "https://www.glassdoor.com/job-listing/recruiting-coordinator-acme"
-        employer_url = "https://job-boards.greenhouse.io/acme/jobs/123"
+        board_url = "https://www.glassdoor.com/job-listing/recruiting-coordinator-exampleco"
+        employer_url = "https://job-boards.greenhouse.io/exampleco/jobs/123"
         description = "About the role. Responsibilities and qualifications. " * 12
         board_payload = {
-            "metadata": {"title": "Recruiting Coordinator | Acme"},
+            "metadata": {"title": "Recruiting Coordinator | ExampleCo"},
             "content": {
                 "plain_text": description,
                 "links": [{"text": "Apply", "url": employer_url}],
@@ -391,12 +391,12 @@ class PipelineTests(unittest.TestCase):
             "structured_data": [],
         }
         employer_payload = {
-            "metadata": {"title": "Recruiting Coordinator | Acme"},
+            "metadata": {"title": "Recruiting Coordinator | ExampleCo"},
             "content": {"plain_text": description},
             "structured_data": [{
                 "@type": "JobPosting",
                 "title": "Recruiting Coordinator",
-                "hiringOrganization": {"name": "Acme"},
+                "hiringOrganization": {"name": "ExampleCo"},
                 "description": description,
                 "datePosted": "2026-07-28",
             }],
@@ -488,7 +488,7 @@ class PipelineTests(unittest.TestCase):
                         "id": 7,
                         "platform": "glassdoor",
                         "url": "https://www.glassdoor.com/job-listing/123",
-                        "title": "Recruiting Coordinator | Acme",
+                        "title": "Recruiting Coordinator | ExampleCo",
                     }],
                 }
             if path == "/page/text":
@@ -537,7 +537,7 @@ class PipelineTests(unittest.TestCase):
     def test_agent_web_browser_recovers_blocked_board_for_employer_resolution(self) -> None:
         """Use AWB visible text when WebClaw cannot read a board, then resolve the ATS page."""
         board_url = "https://www.ziprecruiter.com/jobs/recruiting-coordinator-123"
-        employer_url = "https://job-boards.greenhouse.io/acme/jobs/123"
+        employer_url = "https://job-boards.greenhouse.io/exampleco/jobs/123"
         description = "About the role. Responsibilities and qualifications. " * 12
 
         class BlockedBoardWebClaw:
@@ -545,12 +545,12 @@ class PipelineTests(unittest.TestCase):
                 if url == board_url:
                     raise WebClawError("HTTP 403")
                 return {
-                    "metadata": {"title": "Recruiting Coordinator | Acme"},
+                    "metadata": {"title": "Recruiting Coordinator | ExampleCo"},
                     "content": {"plain_text": description},
                     "structured_data": [{
                         "@type": "JobPosting",
                         "title": "Recruiting Coordinator",
-                        "hiringOrganization": {"name": "Acme"},
+                        "hiringOrganization": {"name": "ExampleCo"},
                         "description": description,
                     }],
                 }
@@ -562,7 +562,7 @@ class PipelineTests(unittest.TestCase):
             def read_job_page(self, url, board):
                 return AgentWebBrowserPage(
                     url=url,
-                    title="Recruiting Coordinator | Acme",
+                    title="Recruiting Coordinator | ExampleCo",
                     platform="ziprecruiter",
                     text=description,
                     text_length=len(description),
