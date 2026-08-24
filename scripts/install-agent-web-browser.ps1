@@ -8,7 +8,7 @@ $ProjectRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Pa
 $SourceRoot = Join-Path $ProjectRoot 'tools\upstream\agent-web-browser'
 $PatchPath = Join-Path $ProjectRoot 'patches\agent-web-browser\0001-allow-documented-job-board-navigation.patch'
 $Repository = 'https://github.com/BarnsL/agent-web-browser.git'
-$PinnedCommit = 'cf96d04c6f2e369a4574786f75957c040cb7bf9f'
+$PinnedCommit = 'bcb8fb238602513f8897070c4a68057b03889eda'
 
 if (-not (Test-Path -LiteralPath $SourceRoot)) {
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $SourceRoot) | Out-Null

@@ -11,62 +11,42 @@ Agent Web Browser (AWB) build patch.
    group under one taskbar icon.
 
 diff --git a/src-tauri/Cargo.toml b/src-tauri/Cargo.toml
-index 3fb0fb4..b20994c 100644
+index 2260186..889757c 100644
 --- a/src-tauri/Cargo.toml
 +++ b/src-tauri/Cargo.toml
-@@ -37,6 +37,7 @@ windows = { version = "0.61", features = [
-   "Win32_Foundation",
-   "Win32_System_Com",
+@@ -38,2 +38,3 @@ windows = { version = "0.61", features = [
    "Win32_System_WinRT",
 +  "Win32_UI_Shell",
  ] }
- 
- [build-dependencies]
 diff --git a/src-tauri/src/api.rs b/src-tauri/src/api.rs
-index a32c407..faca7a1 100644
+index eadb8c7..84bb75f 100644
 --- a/src-tauri/src/api.rs
 +++ b/src-tauri/src/api.rs
-@@ -197,7 +197,7 @@ async fn health(AxState(api): AxState<ApiState>) -> Json<Value> {
-     let _ = api;
-     Json(json!({
+@@ -198,3 +198,3 @@ async fn health(AxState(api): AxState<ApiState>) -> Json<Value> {
          "ok": true,
 -        "app": "Social Media Agent Browser",
 +        "app": "Agent Web Browser",
          "version": "0.1.0",
-         "port": API_PORT,
-     }))
-@@ -456,12 +456,16 @@ fn validate_api_navigation(raw: &str) -> Result<String, String> {
-         "youtube.com",
-         "youtu.be",
-         "twitch.tv",
-+        "glassdoor.com",
-+        "ziprecruiter.com",
+@@ -516,2 +516,4 @@ fn validate_api_navigation(raw: &str) -> Result<String, String> {
+         "ziprecruiter.com",
 +        "linkedin.com",
 +        "indeed.com",
      ]
-     .iter()
-     .any(|expected| exact_or_subdomain(&host, expected));
-     if !allowed && !opt_in_enabled("SMAB_ALLOW_ARBITRARY_NAVIGATION") {
+@@ -521,3 +523,3 @@ fn validate_api_navigation(raw: &str) -> Result<String, String> {
          return Err(
 -            "agent navigation is restricted to supported social platforms; \
 +            "agent navigation is restricted to supported first-party platforms; \
               set SMAB_ALLOW_ARBITRARY_NAVIGATION=1 for an operator-approved session"
-                 .into(),
-         );
 diff --git a/src-tauri/src/main.rs b/src-tauri/src/main.rs
-index b3486b2..d019c7c 100644
+index 87d71a7..96e9e72 100644
 --- a/src-tauri/src/main.rs
 +++ b/src-tauri/src/main.rs
-@@ -1,5 +1,5 @@
+@@ -1,3 +1,3 @@
  #![windows_subsystem = "windows"]
 -// Social Media Agent Browser (SMAB) v0.1.0
 +// Agent Web Browser (AWB) v0.1.0
  // Tauri 2 multi-tab, multi-platform browser (Discord / Instagram / Facebook /
- // Twitter-X) with a full agent-automation REST API + MCP server.
- //
-@@ -575,6 +575,24 @@ async fn open_devtools(
-     Ok(())
- }
+@@ -648,2 +648,20 @@ async fn open_devtools(
  
 +/// Temporarily grow the 56px tab-bar webview so its dropdown overlays
 +/// (hamburger menu, new-tab menu, URL editor, extensions panel) can paint
@@ -87,11 +67,7 @@ index b3486b2..d019c7c 100644
 +}
 +
  // ═══════════════════════════════════════════════════════════════
- // RESIZE HANDLER
- // ═══════════════════════════════════════════════════════════════
-@@ -632,6 +650,15 @@ async fn reposition_all(app: &tauri::AppHandle, state: &SharedState) {
- // ═══════════════════════════════════════════════════════════════
- 
+@@ -705,2 +723,11 @@ async fn reposition_all(app: &tauri::AppHandle, state: &SharedState) {
  fn main() {
 +    // Group every window this process creates under ONE taskbar icon on
 +    // Windows by pinning a stable AppUserModelID before any window exists.
@@ -103,39 +79,23 @@ index b3486b2..d019c7c 100644
 +        let _ = SetCurrentProcessExplicitAppUserModelID(PCWSTR(aumid.as_ptr()));
 +    }
      tracing_subscriber::fmt()
-         .with_env_filter(
-             EnvFilter::from_default_env()
-@@ -639,7 +666,7 @@ fn main() {
-                 .add_directive("social_media_agent_browser=info".parse().unwrap()),
-         )
+@@ -712,3 +739,3 @@ fn main() {
          .init();
 -    tracing::info!("Social Media Agent Browser v0.1.0 starting...");
 +    tracing::info!("Agent Web Browser v0.1.0 starting...");
  
-     let api_security = security::ApiSecurity::load_or_create()
-         .expect("SMAB could not initialize its per-install API token");
-@@ -714,7 +741,8 @@ fn main() {
-             get_active_tab,
-             get_tab_state,
+@@ -748,3 +775,4 @@ fn main() {
              navigate_tab,
 -            open_devtools
 +            open_devtools,
 +            set_chrome_overlay
          ])
-         .on_page_load(move |webview, _payload| {
-             let label = webview.label().to_string();
-@@ -745,7 +773,7 @@ fn main() {
-                 .map(|value| value.trim() == "1")
-                 .unwrap_or(false);
+@@ -779,3 +807,3 @@ fn main() {
              let window = WindowBuilder::new(app, "main")
 -                .title("Social Media Agent Browser")
 +                .title("Agent Web Browser")
                  .inner_size(1400.0, 900.0)
-                 .min_inner_size(900.0, 600.0)
-                 .resizable(true)
-@@ -857,5 +885,5 @@ fn main() {
-             Ok(())
-         })
+@@ -893,3 +921,3 @@ fn main() {
          .run(tauri::generate_context!())
 -        .expect("error while running Social Media Agent Browser");
 +        .expect("error while running Agent Web Browser");
@@ -144,154 +104,93 @@ diff --git a/src-tauri/src/platforms/mod.rs b/src-tauri/src/platforms/mod.rs
 index b9385b8..1dc351d 100644
 --- a/src-tauri/src/platforms/mod.rs
 +++ b/src-tauri/src/platforms/mod.rs
-@@ -46,13 +46,15 @@ pub enum Platform {
-     Twitch,
-     Glassdoor,
+@@ -48,2 +48,4 @@ pub enum Platform {
      Ziprecruiter,
 +    Linkedin,
 +    Indeed,
      /// Any other site has no platform-specific automation surface.
-     Unknown,
- }
- 
- impl Platform {
+@@ -54,3 +56,3 @@ impl Platform {
      /// All first-class platforms, in tab-launch order.
 -    pub const ALL: [Platform; 8] = [
 +    pub const ALL: [Platform; 10] = [
          Platform::Discord,
-         Platform::Instagram,
-         Platform::Facebook,
-@@ -61,6 +63,8 @@ impl Platform {
-         Platform::Twitch,
-         Platform::Glassdoor,
+@@ -63,2 +65,4 @@ impl Platform {
          Platform::Ziprecruiter,
 +        Platform::Linkedin,
 +        Platform::Indeed,
      ];
- 
-     /// Detect a platform from a tab URL by host match.
-@@ -86,6 +90,10 @@ impl Platform {
-             Platform::Glassdoor
-         } else if matches("ziprecruiter.com") {
+@@ -88,2 +92,6 @@ impl Platform {
              Platform::Ziprecruiter
 +        } else if matches("linkedin.com") {
 +            Platform::Linkedin
 +        } else if matches("indeed.com") {
 +            Platform::Indeed
          } else {
-             Platform::Unknown
-         }
-@@ -102,6 +110,8 @@ impl Platform {
-             Platform::Twitch => "twitch",
-             Platform::Glassdoor => "glassdoor",
+@@ -104,2 +112,4 @@ impl Platform {
              Platform::Ziprecruiter => "ziprecruiter",
 +            Platform::Linkedin => "linkedin",
 +            Platform::Indeed => "indeed",
              Platform::Unknown => "unknown",
-         }
-     }
-@@ -117,6 +127,8 @@ impl Platform {
-             Platform::Twitch => "Twitch",
-             Platform::Glassdoor => "Glassdoor",
+@@ -119,2 +129,4 @@ impl Platform {
              Platform::Ziprecruiter => "ZipRecruiter",
 +            Platform::Linkedin => "LinkedIn",
 +            Platform::Indeed => "Indeed",
              Platform::Unknown => "Web",
-         }
-     }
-@@ -132,6 +144,8 @@ impl Platform {
-             Platform::Twitch => "#9146ff",
-             Platform::Glassdoor => "#00a65a",
+@@ -134,2 +146,4 @@ impl Platform {
              Platform::Ziprecruiter => "#2a6ebb",
 +            Platform::Linkedin => "#0a66c2",
 +            Platform::Indeed => "#2557a7",
              Platform::Unknown => "#888888",
-         }
-     }
-@@ -147,6 +161,8 @@ impl Platform {
-             Platform::Twitch => "https://www.twitch.tv/directory",
-             Platform::Glassdoor => "https://www.glassdoor.com/",
+@@ -149,2 +163,4 @@ impl Platform {
              Platform::Ziprecruiter => "https://www.ziprecruiter.com/",
 +            Platform::Linkedin => "https://www.linkedin.com/",
 +            Platform::Indeed => "https://www.indeed.com/",
              Platform::Unknown => "about:blank",
-         }
-     }
-@@ -163,6 +179,9 @@ impl Platform {
-             Platform::Twitch => TWITCH_JS,
-             Platform::Glassdoor => GLASSDOOR_JS,
+@@ -165,2 +181,5 @@ impl Platform {
              Platform::Ziprecruiter => ZIPRECRUITER_JS,
 +            // LinkedIn/Indeed use the shared common observer only (pageText is
 +            // generic); no platform-specific automation surface is added.
 +            Platform::Linkedin | Platform::Indeed => "",
              Platform::Unknown => "",
-         };
-         format!("{COMMON_JS}\n{SENTINEL_JS}\n{ADBLOCK_JS}\n{platform_js}")
 diff --git a/src/index.html b/src/index.html
-index 68dd1a2..dbe9a33 100644
+index ae2f538..f2e0612 100644
 --- a/src/index.html
 +++ b/src/index.html
-@@ -15,7 +15,7 @@
-       --border-color: #2d3748;
-     }
+@@ -17,3 +17,3 @@
      * { margin: 0; padding: 0; box-sizing: border-box; }
 -    html, body { height: 56px; overflow: hidden; }
 +    html, body { height: 100%; overflow: hidden; }
      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg-base); color: var(--text-main); }
-     .topbar { border-bottom: 2px solid var(--accent-primary); background: var(--bg-topbar); padding: 4px 8px; display: flex; align-items: center; gap: 8px; -webkit-app-region: drag; height: 56px; }
-     .brand { font-size: 13px; font-weight: 700; padding: 6px 10px; background: linear-gradient(135deg, #1e1b4b, #312e81); border: 1px solid var(--accent-glow); border-radius: 6px; -webkit-app-region: no-drag; white-space: nowrap; display: flex; align-items: center; gap: 6px; color: #fff; box-shadow: 0 0 10px rgba(139, 92, 246, 0.2); }
-@@ -69,7 +69,7 @@
- </head>
- <body>
+@@ -71,3 +71,3 @@
    <div class="topbar">
 -    <span class="brand">🛰️ AGENT BROWSER</span>
 +    <span class="brand">🛰️ AGENT WEB BROWSER</span>
      <span class="divider"></span>
-     <div class="nav-btns">
-       <button id="btn-back" title="Back (Alt+Left)" disabled>←</button>
-@@ -113,7 +113,9 @@
-       { slug: 'youtube',     label: 'YouTube',      icon: '▶️', accent: '#ff0033', home: 'https://www.youtube.com/' },
-       { slug: 'twitch',      label: 'Twitch',       icon: '🟣', accent: '#9146ff', home: 'https://www.twitch.tv/directory' },
+@@ -115,3 +115,5 @@
        { slug: 'glassdoor',   label: 'Glassdoor',    icon: '💼', accent: '#00a65a', home: 'https://www.glassdoor.com/' },
 -      { slug: 'ziprecruiter',label: 'ZipRecruiter', icon: '🎯', accent: '#2a6ebb', home: 'https://www.ziprecruiter.com/' }
 +      { slug: 'ziprecruiter',label: 'ZipRecruiter', icon: '🎯', accent: '#2a6ebb', home: 'https://www.ziprecruiter.com/' },
 +      { slug: 'linkedin',    label: 'LinkedIn',     icon: '🔗', accent: '#0a66c2', home: 'https://www.linkedin.com/' },
 +      { slug: 'indeed',      label: 'Indeed',       icon: '🧭', accent: '#2557a7', home: 'https://www.indeed.com/' }
      ];
-     const P_BY_SLUG = Object.fromEntries(PLATFORMS.map(p => [p.slug, p]));
-     function platformOf(url) {
-@@ -127,6 +129,8 @@
-         if (hostIs('twitch.tv')) return P_BY_SLUG.twitch;
-         if (hostIs('glassdoor.com')) return P_BY_SLUG.glassdoor;
+@@ -129,2 +131,4 @@
          if (hostIs('ziprecruiter.com')) return P_BY_SLUG.ziprecruiter;
 +        if (hostIs('linkedin.com')) return P_BY_SLUG.linkedin;
 +        if (hostIs('indeed.com')) return P_BY_SLUG.indeed;
        } catch (e) {}
-       return { slug: 'web', label: 'Web', icon: '🌐', accent: '#888' };
-     }
-@@ -136,7 +140,7 @@
-     let apiToken = '';
-     async function ensureApiToken() {
+@@ -138,3 +142,3 @@
        if (!apiToken) apiToken = await invoke('get_api_token');
 -      if (!apiToken) throw new Error('SMAB API token is unavailable');
 +      if (!apiToken) throw new Error('AWB API token is unavailable');
        return apiToken;
-     }
-     async function apiHeaders(json = false) {
-@@ -168,6 +172,10 @@
-       finally { isCreating = false; }
-     }
+@@ -170,2 +174,6 @@
      async function switchTab(id) { if (activeTabId === id) return; try { await invoke('switch_tab', { tabId: id }); activeTabId = id; renderTabs(); updateNavButtons(); } catch (e) { console.error('switchTab:', e); } }
 +    // Expose tab actions to the authenticated loopback bridge.
 +    window.createTab = createTab;
 +    window.switchTab = switchTab;
 +
      async function closeTab(id) {
-       const idx = tabs.findIndex(t => t.id === id); if (idx === -1) return;
-       try { await invoke('close_tab', { tabId: id }); tabs.splice(idx, 1); delete tabNavState[id];
-@@ -224,6 +232,28 @@
-     }
-     function updateNavButtons() { const s = tabNavState[activeTabId]; document.getElementById('btn-back').disabled = !s?.canGoBack; document.getElementById('btn-fwd').disabled = !s?.canGoForward; }
+@@ -226,2 +234,24 @@
  
 +    // ── chrome overlay sizing ────────────────────────────────────
 +    // The tab-bar webview is only 56px tall, so dropdown overlays (menus,
@@ -316,62 +215,39 @@ index 68dd1a2..dbe9a33 100644
 +    function collapseChromeIfIdle() { if (!anyOverlayOpen()) setChromeOverlay(CHROME_H); }
 +
      // ── URL editor (right-click a tab, or menu → Open URL) ───────
-     let urlTargetTab = null;
-     function openUrlEditor(tabId, anchorEl) {
-@@ -233,11 +263,12 @@
-       const t = tabs.find(x => x.id === tabId);
-       inp.value = t ? t.url : '';
+@@ -235,2 +265,3 @@
        ed.classList.add('open');
 +      expandChromeFor(ed);
        if (anchorEl) { const r = anchorEl.getBoundingClientRect(); ed.style.left = Math.max(6, Math.min(r.left, window.innerWidth - 540)) + 'px'; }
-       else { ed.style.left = '120px'; }
-       inp.focus(); inp.select();
+@@ -239,3 +270,3 @@
      }
 -    function closeUrlEditor() { document.getElementById('url-editor').classList.remove('open'); urlTargetTab = null; }
 +    function closeUrlEditor() { document.getElementById('url-editor').classList.remove('open'); urlTargetTab = null; collapseChromeIfIdle(); }
      function submitUrl() {
-       const url = document.getElementById('url-input').value.trim(); if (!url) return;
-       const id = urlTargetTab != null ? urlTargetTab : activeTabId;
-@@ -259,7 +290,7 @@
-       b.onclick = () => { addMenu.classList.remove('open'); createTab(p.home); };
-       addMenu.appendChild(b);
+@@ -261,3 +292,3 @@
      });
 -    document.getElementById('btn-add-tab').onclick = (e) => { e.stopPropagation(); closeAllMenus(); addMenu.classList.toggle('open'); };
 +    document.getElementById('btn-add-tab').onclick = (e) => { e.stopPropagation(); const wasOpen = addMenu.classList.contains('open'); closeAllMenus(); if (!wasOpen) { addMenu.classList.add('open'); expandChromeFor(addMenu); } };
  
-     // ── hamburger browser menu ───────────────────────────────────
-     const bMenu = document.getElementById('browser-menu');
-@@ -296,7 +327,7 @@
-       const st = await getJSON('/adblock/status');
-       const on = st && st.enabledPref !== false;
+@@ -298,3 +329,3 @@
        bMenu.appendChild(menuBtn('🛡️ Ad Blocker', on ? 'ON' : 'OFF', async () => {
 -        await post(on ? '/adblock/disable' : '/adblock/enable'); buildMenu(); bMenu.classList.add('open');
 +        await post(on ? '/adblock/disable' : '/adblock/enable'); await buildMenu(); bMenu.classList.add('open'); expandChromeFor(bMenu);
        }));
-       bMenu.appendChild(menuBtn('🧩 Extensions…', '', () => openExtPanel()));
-       bMenu.appendChild(menuBtn('🔧 Open DevTools', '', () => invoke('open_devtools', { tabId: activeTabId }).catch(() => {})));
-@@ -319,15 +350,15 @@
-           bMenu.appendChild(menuBtn('＋ Add identity…', '', () => {
-             const label = prompt('New identity label (e.g. "Business"):'); if (!label) return;
+@@ -321,3 +352,3 @@
              const id = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || ('id' + Date.now());
 -            post('/identities/add', { id, label, kind: 'web', color: '#22c55e' }).then(() => { buildMenu().then(() => bMenu.classList.add('open')); });
 +            post('/identities/add', { id, label, kind: 'web', color: '#22c55e' }).then(() => { buildMenu().then(() => { bMenu.classList.add('open'); expandChromeFor(bMenu); }); });
            }));
-         } catch (e) {}
-       }
+@@ -326,4 +357,6 @@
  
-       bMenu.appendChild(menuSep());
--      bMenu.appendChild(menuBtn('ℹ️ About SMAB', '', () => createTab('https://github.com/BarnsL/Agent-Web-Browser')));
++      bMenu.appendChild(menuSep());
 +      bMenu.appendChild(menuBtn('ℹ️ About Agent Web Browser', '', () => createTab('https://github.com/BarnsL/Agent-Web-Browser')));
      }
 -    document.getElementById('btn-menu').onclick = async (e) => { e.stopPropagation(); const open = bMenu.classList.contains('open'); closeAllMenus(); if (!open) { await buildMenu(); bMenu.classList.add('open'); } };
 +    document.getElementById('btn-menu').onclick = async (e) => { e.stopPropagation(); const open = bMenu.classList.contains('open'); closeAllMenus(); if (!open) { await buildMenu(); bMenu.classList.add('open'); expandChromeFor(bMenu); } };
  
-     // ── extensions panel ─────────────────────────────────────────
-     async function openExtPanel() {
-@@ -368,9 +399,10 @@
-         hint.textContent = 'Add uBlock Origin via scripts/fetch-ublock.ps1, then relaunch.';
-         list.appendChild(hint);
+@@ -368,5 +401,6 @@
        }
 +      expandChromeFor(panel);
      }
@@ -379,11 +255,7 @@ index 68dd1a2..dbe9a33 100644
 -    function closeAllMenus() { addMenu.classList.remove('open'); bMenu.classList.remove('open'); document.getElementById('ext-panel').classList.remove('open'); }
 +    function closeAllMenus() { addMenu.classList.remove('open'); bMenu.classList.remove('open'); document.getElementById('ext-panel').classList.remove('open'); collapseChromeIfIdle(); }
      document.addEventListener('click', (e) => {
-       if (!e.target.closest('.menu-wrap') && !e.target.closest('#ext-panel')) { bMenu.classList.remove('open'); document.getElementById('ext-panel').classList.remove('open'); }
-       if (!e.target.closest('.add-wrap')) addMenu.classList.remove('open');
-@@ -401,17 +433,17 @@
- 
-     // Platforms opened as tabs on launch. STARTUP_TABS[0] is the tab the Rust
+@@ -401,6 +435,6 @@
      // host creates (must match main.rs `default_url` = Instagram); the rest are
 -    // opened here so every platform is ready the moment SMAB starts. Discord is
 +    // opened here so every platform is ready the moment AWB starts. Discord is
@@ -392,13 +264,8 @@ index 68dd1a2..dbe9a33 100644
 -    const STARTUP_TABS = ['instagram', 'facebook', 'twitter', 'youtube', 'twitch', 'discord'];
 +    const STARTUP_TABS = ['instagram', 'facebook', 'twitter', 'youtube', 'twitch', 'glassdoor', 'ziprecruiter', 'linkedin', 'indeed', 'discord'];
      (async () => {
-       await new Promise((resolve, reject) => { if (window.__TAURI__?.core?.invoke) resolve(); else { const start = Date.now(); const i = setInterval(() => { if (window.__TAURI__?.core?.invoke) { clearInterval(i); resolve(); } else if (Date.now() - start > 5000) { clearInterval(i); reject(new Error('IPC timeout')); } }, 50); } });
-       await ensureApiToken();
-       const first = P_BY_SLUG[STARTUP_TABS[0]] || P_BY_SLUG.discord;
-       tabs = [{ id: 0, title: first.label, url: first.home, platform: first.slug }];
+@@ -411,3 +445,3 @@
        activeTabId = 0; nextId = 1; tabNavState[0] = { canGoBack: false, canGoForward: false }; renderTabs();
 -      // Open the remaining startup platforms, each in its own tab.
 +      // Open the remaining startup platforms, including the read-only job boards.
        for (let k = 1; k < STARTUP_TABS.length; k++) {
-         const p = P_BY_SLUG[STARTUP_TABS[k]];
-         if (!p) continue;
