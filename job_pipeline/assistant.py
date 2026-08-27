@@ -219,7 +219,7 @@ class OpenAICompatibleProvider:
             raise ProviderError("Remote providers must use HTTPS.")
         if parsed.username is not None or parsed.password is not None:
             raise ProviderError("Provider URL user information is not allowed.")
-        if credential_env and not re.fullmatch(r"[A-Z][A-Z0-9_]{0,79}", credential_env):
+        if credential_env and not re.fullmatch(r"[A-Z][A-Z0-9_]{0,71}", credential_env):
             raise ProviderError("Provider credential environment name is invalid.")
         if not name.strip() or len(name) > 80:
             raise ProviderError("Provider name is invalid.")
@@ -237,28 +237,114 @@ class OpenAICompatibleProvider:
                 headers["Authorization"] = f"Bearer {credential}"
         return headers
 
+    def _credential_configured(self) -> bool:
+        return not self.credential_env or bool(os.environ.get(self.credential_env, "").strip())
+
+    @staticmethod
+    def _model_ids(payload: Mapping[str, Any]) -> list[str]:
+        data = payload.get("data", [])
+        if not isinstance(data, list):
+            raise ProviderError("Provider model response is invalid.")
+        identifiers = [
+            item["id"].strip()
+            for item in data
+            if isinstance(item, Mapping)
+            and isinstance(item.get("id"), str)
+            and item["id"].strip()
+        ][:200]
+        if not identifiers:
+            raise ProviderError("Provider model response is invalid.")
+        return identifiers
+
+    @staticmethod
+    def _probe_failure(exc: Exception) -> tuple[bool, bool, str]:
+        message = str(exc).casefold()
+        if re.search(r"\b(?:401|403)\b", message) or any(
+            marker in message
+            for marker in (
+                "unauthorized",
+                "unauthorised",
+                "forbidden",
+                "authentication",
+                "authorization",
+            )
+        ):
+            return True, False, "Provider authorization failed"
+        if any(
+            marker in message
+            for marker in (
+                "connection refused",
+                "connection reset",
+                "network",
+                "timed out",
+                "timeout",
+                "unreachable",
+                "urlopen error",
+                "name or service not known",
+            )
+        ):
+            return False, False, "Provider is unreachable"
+        return True, True, "Provider response is invalid"
+
     def readiness(self) -> dict[str, Any]:
-        configured = not self.credential_env or bool(os.environ.get(self.credential_env))
+        configured = self._credential_configured()
+        if not configured:
+            return {
+                "ready": False,
+                "credential_configured": False,
+                "reachable": False,
+                "authenticated": False,
+                "model_count": 0,
+                "detail": "Provider credential is not configured",
+            }
+        try:
+            payload = self.transport(
+                "GET", f"{self.base_url}/models", self._headers(), None, self.timeout_seconds
+            )
+        except Exception as exc:
+            reachable, authenticated, detail = self._probe_failure(exc)
+            return {
+                "ready": False,
+                "credential_configured": True,
+                "reachable": reachable,
+                "authenticated": authenticated,
+                "model_count": 0,
+                "detail": detail,
+            }
+        try:
+            identifiers = self._model_ids(payload)
+        except (AttributeError, ProviderError, TypeError):
+            return {
+                "ready": False,
+                "credential_configured": True,
+                "reachable": True,
+                "authenticated": True,
+                "model_count": 0,
+                "detail": "Provider response is invalid",
+            }
         return {
-            "ready": configured,
-            "credential_configured": configured,
-            "detail": "Provider ready" if configured else "Provider credential is not configured",
+            "ready": True,
+            "credential_configured": True,
+            "reachable": True,
+            "authenticated": True,
+            "model_count": len(identifiers),
+            "detail": "Provider ready",
         }
 
     def models(self) -> list[str]:
-        if not self.readiness()["ready"]:
-            return []
-        payload = self.transport(
-            "GET", f"{self.base_url}/models", self._headers(), None, self.timeout_seconds
-        )
-        data = payload.get("data", [])
-        if not isinstance(data, list):
-            raise ProviderError("Provider model list is invalid.")
-        return [
-            str(item["id"])
-            for item in data
-            if isinstance(item, Mapping) and isinstance(item.get("id"), str)
-        ][:200]
+        if not self._credential_configured():
+            raise ProviderError("Provider credential is not configured.")
+        try:
+            payload = self.transport(
+                "GET", f"{self.base_url}/models", self._headers(), None, self.timeout_seconds
+            )
+        except Exception as exc:
+            _reachable, _authenticated, detail = self._probe_failure(exc)
+            raise ProviderError(f"{detail}.") from exc
+        try:
+            return self._model_ids(payload)
+        except (AttributeError, TypeError) as exc:
+            raise ProviderError("Provider model response is invalid.") from exc
 
     @staticmethod
     def _message_payload(request: AssistantRequest) -> list[dict[str, Any]]:
@@ -287,7 +373,7 @@ class OpenAICompatibleProvider:
         return messages
 
     def complete(self, request: AssistantRequest) -> AssistantResponse:
-        if not self.readiness()["ready"]:
+        if not self._credential_configured():
             raise ProviderError("Provider credential is not configured.")
         tools = [
             {
@@ -307,13 +393,16 @@ class OpenAICompatibleProvider:
         if tools:
             body["tools"] = tools
             body["tool_choice"] = "auto"
-        payload = self.transport(
-            "POST",
-            f"{self.base_url}/chat/completions",
-            self._headers(),
-            body,
-            self.timeout_seconds,
-        )
+        try:
+            payload = self.transport(
+                "POST",
+                f"{self.base_url}/chat/completions",
+                self._headers(),
+                body,
+                self.timeout_seconds,
+            )
+        except Exception as exc:
+            raise ProviderError("Provider completion request failed.") from exc
         try:
             message = payload["choices"][0]["message"]
         except (KeyError, IndexError, TypeError) as exc:

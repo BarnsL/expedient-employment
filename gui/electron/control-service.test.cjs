@@ -112,6 +112,42 @@ test('manager passes the supplied provider environment only to its owned child',
   await manager.stop();
 });
 
+test('manager rejects malformed provider environments before spawning', async () => {
+  let spawnCount = 0;
+  const manager = new ControlServiceManager({
+    spawnImpl: () => {
+      spawnCount += 1;
+      throw new Error('spawn must not run');
+    },
+  });
+  const base = {
+    EXPEDIENT_PROVIDER_URL: 'http://127.0.0.1:4853/v1',
+    EXPEDIENT_PROVIDER_KEY_ENV: 'TEST_FREECHAIN_ACCESS_KEY',
+    TEST_FREECHAIN_ACCESS_KEY: 'synthetic-provider-key',
+  };
+  const invalidEnvironments = [
+    { ...base, UNKNOWN_PROVIDER_OPTION: 'nope' },
+    { ...base, [Symbol('unknown provider option')]: 'nope' },
+    { ...base, EXPEDIENT_PROVIDER_URL: 'http://public.example/v1' },
+    { ...base, EXPEDIENT_PROVIDER_URL: 'https://127.0.0.1:4853/v1' },
+    { ...base, EXPEDIENT_PROVIDER_URL: 'http://127.0.0.1:4853/v1/models' },
+    { ...base, EXPEDIENT_PROVIDER_KEY_ENV: 'lowercase_name' },
+    { ...base, TEST_FREECHAIN_ACCESS_KEY: '' },
+    { ...base, TEST_FREECHAIN_ACCESS_KEY: 'x'.repeat((64 * 1024) + 1) },
+  ];
+  const options = {
+    pythonExecutable: 'python-test',
+    projectRoot: 'C:\\app\\pipeline',
+    dataRoot: 'C:\\app\\data',
+    nodeExecutable: 'C:\\app\\electron.exe',
+  };
+
+  for (const providerEnv of invalidEnvironments) {
+    await assert.rejects(manager.start({ ...options, providerEnv }), /provider environment/i);
+  }
+  assert.equal(spawnCount, 0);
+});
+
 test('restart cancels an in-flight start and waits for exit before spawning one replacement', async () => {
   const events = [];
   const children = [];

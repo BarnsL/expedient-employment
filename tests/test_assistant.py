@@ -216,19 +216,44 @@ class AssistantTests(unittest.TestCase):
 
         with patch.dict(os.environ, {credential_env: ""}, clear=False):
             missing = provider(lambda *_args: {"data": [{"id": "unused"}]})
-            self.assertFalse(missing.readiness()["ready"])
+            self.assertEqual(
+                missing.readiness(),
+                {
+                    "ready": False,
+                    "credential_configured": False,
+                    "reachable": False,
+                    "authenticated": False,
+                    "model_count": 0,
+                    "detail": "Provider credential is not configured",
+                },
+            )
 
         failures = (
-            lambda *_args: (_ for _ in ()).throw(ProviderError("connection refused")),
-            lambda *_args: (_ for _ in ()).throw(ProviderError("HTTP 401 unauthorized")),
-            lambda *_args: {"data": "not-a-list"},
-            lambda *_args: {"data": [{}]},
+            (
+                lambda *_args: (_ for _ in ()).throw(ProviderError("connection refused")),
+                False,
+                False,
+                "Provider is unreachable",
+            ),
+            (
+                lambda *_args: (_ for _ in ()).throw(ProviderError("HTTP 401 unauthorized")),
+                True,
+                False,
+                "Provider authorization failed",
+            ),
+            (lambda *_args: {"data": "not-a-list"}, True, True, "Provider response is invalid"),
+            (lambda *_args: {"data": [{}]}, True, True, "Provider response is invalid"),
         )
         with patch.dict(os.environ, {credential_env: credential}, clear=False):
-            for transport in failures:
+            for transport, reachable, authenticated, detail in failures:
                 with self.subTest(transport=transport):
                     readiness = provider(transport).readiness()
                     self.assertFalse(readiness["ready"])
+                    self.assertTrue(readiness["credential_configured"])
+                    self.assertEqual(readiness["reachable"], reachable)
+                    self.assertEqual(readiness["authenticated"], authenticated)
+                    self.assertEqual(readiness["model_count"], 0)
+                    self.assertEqual(readiness["detail"], detail)
                     self.assertNotIn(credential, str(readiness))
 
             seen_requests: list[dict[str, object]] = []
@@ -240,11 +265,101 @@ class AssistantTests(unittest.TestCase):
             readiness = provider(ready_transport).readiness()
 
         self.assertTrue(readiness["ready"])
+        self.assertTrue(readiness["credential_configured"])
+        self.assertTrue(readiness["reachable"])
+        self.assertTrue(readiness["authenticated"])
+        self.assertEqual(readiness["model_count"], 1)
+        self.assertEqual(readiness["detail"], "Provider ready")
         self.assertNotIn(credential, str(readiness))
         self.assertEqual(len(seen_requests), 1)
         self.assertEqual(seen_requests[0]["method"], "GET")
         self.assertTrue(str(seen_requests[0]["url"]).endswith("/models"))
         self.assertEqual(seen_requests[0]["headers"]["Authorization"], f"Bearer {credential}")
+
+    def test_openai_provider_models_probes_directly_and_rejects_unusable_ids(self) -> None:
+        credential_env = "TEST_FREECHAIN_ACCESS_KEY"
+        seen_requests: list[str] = []
+
+        def transport(method, url, _headers, _body, _timeout):
+            seen_requests.append(f"{method} {url}")
+            return {"data": [{"id": "  model-a  "}, {"id": ""}, {}]}
+
+        provider = OpenAICompatibleProvider(
+            "FreeChain",
+            "http://127.0.0.1:4853/v1",
+            credential_env=credential_env,
+            transport=transport,
+        )
+        provider.readiness = lambda: (_ for _ in ()).throw(AssertionError("recursive readiness"))
+        with patch.dict(os.environ, {credential_env: "synthetic-provider-key"}, clear=False):
+            self.assertEqual(provider.models(), ["model-a"])
+        self.assertEqual(seen_requests, ["GET http://127.0.0.1:4853/v1/models"])
+
+        invalid = OpenAICompatibleProvider(
+            "FreeChain",
+            "http://127.0.0.1:4853/v1",
+            credential_env=credential_env,
+            transport=lambda *_args: {"data": [{}]},
+        )
+        with patch.dict(os.environ, {credential_env: "synthetic-provider-key"}, clear=False):
+            with self.assertRaisesRegex(ProviderError, "model response is invalid"):
+                invalid.models()
+
+    def test_openai_provider_completion_failure_does_not_expose_transport_detail(self) -> None:
+        credential_env = "TEST_FREECHAIN_ACCESS_KEY"
+        credential = "synthetic-provider-key"
+        seen_methods: list[str] = []
+
+        def transport(method, *_args):
+            seen_methods.append(method)
+            raise ProviderError(f"upstream echoed {credential}")
+
+        provider = OpenAICompatibleProvider(
+            "FreeChain",
+            "http://127.0.0.1:4853/v1",
+            credential_env=credential_env,
+            transport=transport,
+        )
+        request = AssistantRequest(
+            model="model-a",
+            messages=({"role": "user", "content": "hello"},),
+            tools=(),
+        )
+        with patch.dict(os.environ, {credential_env: credential}, clear=False):
+            with self.assertRaises(ProviderError) as raised:
+                provider.complete(request)
+        self.assertEqual(str(raised.exception), "Provider completion request failed.")
+        self.assertNotIn(credential, str(raised.exception))
+        self.assertEqual(seen_methods, ["POST"])
+
+    def test_openai_provider_completion_does_not_probe_models(self) -> None:
+        credential_env = "TEST_FREECHAIN_ACCESS_KEY"
+        seen_requests: list[str] = []
+
+        def transport(method, url, _headers, _body, _timeout):
+            seen_requests.append(f"{method} {url}")
+            if method == "GET":
+                return {"data": [{"id": "model-a"}]}
+            return {"choices": [{"message": {"content": "complete", "tool_calls": []}}]}
+
+        provider = OpenAICompatibleProvider(
+            "FreeChain",
+            "http://127.0.0.1:4853/v1",
+            credential_env=credential_env,
+            transport=transport,
+        )
+        request = AssistantRequest(
+            model="model-a",
+            messages=({"role": "user", "content": "hello"},),
+            tools=(),
+        )
+        with patch.dict(os.environ, {credential_env: "synthetic-provider-key"}, clear=False):
+            response = provider.complete(request)
+        self.assertEqual(response.content, "complete")
+        self.assertEqual(
+            seen_requests,
+            ["POST http://127.0.0.1:4853/v1/chat/completions"],
+        )
 
     def test_openai_provider_rejects_plaintext_remote_base_url(self) -> None:
         with self.assertRaises(ProviderError):

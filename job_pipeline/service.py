@@ -367,8 +367,8 @@ def build_default_runtime(project_root: Path, data_root: Path) -> ControlRuntime
     )
     job_tools = JobPipelineToolAdapter(project_root)
     broker = ToolBroker([*only_cli.tool_specs(), *job_tools.tool_specs()])
-    provider_url = os.environ.get("EXPEDIENT_PROVIDER_URL", "http://127.0.0.1:8000/v1")
-    provider_key_env = os.environ.get("EXPEDIENT_PROVIDER_KEY_ENV", "")
+    provider_url = os.environ.get("EXPEDIENT_PROVIDER_URL", "http://127.0.0.1:4853/v1")
+    provider_key_env = os.environ.get("EXPEDIENT_PROVIDER_KEY_ENV", "FREECHAIN_ACCESS_KEY")
     providers = {
         "FreeChain": OpenAICompatibleProvider(
             "FreeChain",

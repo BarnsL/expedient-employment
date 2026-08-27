@@ -8,6 +8,80 @@ const { spawn } = require('node:child_process');
 const START_TIMEOUT_MS = 15000;
 const STOP_TIMEOUT_MS = 5000;
 const RESPONSE_CAP_BYTES = 2 * 1024 * 1024;
+const MAX_PROVIDER_CREDENTIAL_BYTES = 64 * 1024;
+const PROVIDER_URL_KEY = 'EXPEDIENT_PROVIDER_URL';
+const PROVIDER_KEY_ENV_KEY = 'EXPEDIENT_PROVIDER_KEY_ENV';
+const MANAGED_CHILD_ENV = new Set([
+  'PYTHONPATH',
+  'PYTHONDONTWRITEBYTECODE',
+  'EXPEDIENT_CONTROL_TOKEN',
+  'EXPEDIENT_DATA_DIR',
+  'ONLY_CLI_NODE',
+  'ELECTRON_RUN_AS_NODE',
+  PROVIDER_URL_KEY,
+  PROVIDER_KEY_ENV_KEY,
+]);
+
+function validateProviderEnv(value) {
+  if (value === undefined) return {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Invalid provider environment.');
+  }
+  const providerUrl = value[PROVIDER_URL_KEY];
+  const credentialEnv = value[PROVIDER_KEY_ENV_KEY];
+  if (
+    typeof credentialEnv !== 'string'
+    || !/^[A-Z][A-Z0-9_]{0,71}$/.test(credentialEnv)
+    || MANAGED_CHILD_ENV.has(credentialEnv)
+  ) {
+    throw new Error('Invalid provider environment.');
+  }
+  const expectedKeys = new Set([PROVIDER_URL_KEY, PROVIDER_KEY_ENV_KEY, credentialEnv]);
+  const suppliedKeys = Reflect.ownKeys(value);
+  if (expectedKeys.size !== 3 || suppliedKeys.length !== 3
+      || suppliedKeys.some((key) => typeof key !== 'string' || !expectedKeys.has(key))) {
+    throw new Error('Invalid provider environment.');
+  }
+  if (
+    typeof providerUrl !== 'string'
+    || providerUrl !== providerUrl.trim()
+    || providerUrl.length > 2048
+  ) {
+    throw new Error('Invalid provider environment.');
+  }
+  let parsed;
+  try {
+    parsed = new URL(providerUrl);
+  } catch {
+    throw new Error('Invalid provider environment.');
+  }
+  const loopback = new Set(['127.0.0.1', '[::1]', 'localhost']);
+  if (
+    parsed.protocol !== 'http:'
+    || !loopback.has(parsed.hostname.toLowerCase())
+    || parsed.username
+    || parsed.password
+    || parsed.pathname !== '/v1'
+    || parsed.search
+    || parsed.hash
+  ) {
+    throw new Error('Invalid provider environment.');
+  }
+  const credential = value[credentialEnv];
+  if (
+    typeof credential !== 'string'
+    || !credential.trim()
+    || /[\0\r\n]/.test(credential)
+    || Buffer.byteLength(credential, 'utf8') > MAX_PROVIDER_CREDENTIAL_BYTES
+  ) {
+    throw new Error('Invalid provider environment.');
+  }
+  return {
+    [PROVIDER_URL_KEY]: providerUrl,
+    [PROVIDER_KEY_ENV_KEY]: credentialEnv,
+    [credentialEnv]: credential,
+  };
+}
 
 function validateControlPath(value) {
   const text = String(value || '');
@@ -109,7 +183,8 @@ class ControlServiceManager {
     child.once('close', release);
   }
 
-  async start({ pythonExecutable, projectRoot, dataRoot, nodeExecutable }) {
+  async start({ pythonExecutable, projectRoot, dataRoot, nodeExecutable, providerEnv }) {
+    const validatedProviderEnv = validateProviderEnv(providerEnv);
     if (this.stopPromise) await this.stopPromise;
     if (this.blockedChild) {
       throw new Error('Previous control service has not exited.');
@@ -136,6 +211,7 @@ class ControlServiceManager {
         EXPEDIENT_DATA_DIR: dataRoot,
         ONLY_CLI_NODE: nodeExecutable,
         ELECTRON_RUN_AS_NODE: nodeExecutable === process.execPath ? '1' : process.env.ELECTRON_RUN_AS_NODE,
+        ...validatedProviderEnv,
       };
       const child = this.spawnImpl(
         pythonExecutable,
