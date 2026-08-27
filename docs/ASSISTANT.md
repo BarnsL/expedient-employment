@@ -50,6 +50,34 @@ OpenAI-compatible providers must use HTTPS unless they are loopback services. UR
 
 The provider transport limits request duration and response size. Provider errors pass through secret redaction before they are stored or displayed.
 
+### Installed FreeChain
+
+The installed FreeChain contract uses `http://127.0.0.1:4853/v1` with bearer authentication. The assistant never displays, logs, or documents a credential value.
+
+On first use, the desktop checks sources in this order: an existing encrypted record, the process `FREECHAIN_ACCESS_KEY`, an explicitly configured environment file, then the allowlisted per-user FreeChain environment file. A valid first source stops the search. Re-import repeats that ordered import and replaces the saved encrypted record only after a successful protected write.
+
+Electron `safeStorage` uses the current Windows user protection boundary. Electron user data contains ciphertext only. Plaintext is limited to Electron main-process memory and the environment of the Python control child owned by the application.
+
+Clear removes the encrypted record only when deletion succeeds or the record is already absent. A deletion failure leaves the existing state intact, does not report success, and does not restart a service. Successful re-import and clear operations restart only the application-owned control service. They do not alter unrelated processes.
+
+If another person will use the same Windows account, clear the saved key first.
+
+### Readiness and recovery
+
+The Assistant presents these states without inventing a model:
+
+| State | Meaning and recovery |
+| --- | --- |
+| Credential missing | Re-import a local key, then refresh readiness. |
+| Service unreachable | Start or reconnect the local service, then refresh readiness. |
+| Authentication failed | Re-import the local key, then refresh readiness. |
+| Invalid model response | Recover the provider, then refresh readiness. |
+| Ready | Authentication and a model probe succeeded, and the displayed count is the real model count. |
+
+The earlier chat failure came from targeting port 8000 without the required credential while the installed service uses port 4853 with bearer authentication. The prior interface also masked failed model loading by presenting a fake `auto` state. The current interface keeps model-dependent actions unavailable until readiness and a real model list recover.
+
+Committed unit, React, Electron, lint, and build checks cover the documented contracts. Installed two-launch chat recovery is a separate live acceptance check and remains pending Task 6.
+
 ## Queue controls
 
 - **Edit** changes only a queued user message.

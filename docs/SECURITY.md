@@ -17,6 +17,14 @@ The protected data includes resumes, profile answers, provider credentials, assi
 - Popup creation is denied. Approved session URLs may be opened through the operating system browser.
 - Renderer IPC methods map to fixed handlers with bounded identifiers and payloads.
 
+### FreeChain credential boundary
+
+The installed FreeChain provider uses `http://127.0.0.1:4853/v1` with bearer authentication. Credential material is never returned to the renderer, logs, transcripts, command arguments, or documentation.
+
+The desktop first uses a valid encrypted record. When no saved record is available, it imports in order from the process `FREECHAIN_ACCESS_KEY`, an explicitly configured environment file, and the allowlisted per-user FreeChain environment file. Electron `safeStorage` protects the saved value at the current Windows user boundary, and Electron user data stores ciphertext only. Plaintext is limited to Electron main-process memory and the owned Python control child environment.
+
+Re-import writes a replacement record only after protected persistence succeeds. Clear reports success only after deletion succeeds or the record is already absent. Successful credential changes restart only the owned control service. On a shared Windows account, clear the saved key before another person uses the account.
+
 ## Local service boundary
 
 - The service binds only to loopback on a random port.
@@ -55,9 +63,9 @@ only-cli is used through a fixed typed adapter. Its optional fingerprint-imperso
 
 ## Automation and anti-bot behavior
 
-The application improves reliability around access controls by detecting challenge pages, limiting retries, applying cooldown and circuit controls, and requesting visible user handoff.
+The application detects challenges, throttles retries, honors cooldowns and site policy, applies circuit controls, and requests visible user handoff.
 
-It does not bypass CAPTCHA, spoof fingerprints, replay credentials, conceal automation, manipulate browser detection APIs, or randomize timing to evade controls. Login and challenge completion are user-controlled activities.
+It does not bypass CAPTCHA, spoof fingerprints, replay credentials, conceal automation, manipulate browser detection APIs, or evade anti-bot controls. Login and challenge completion are user-controlled activities.
 
 ## Privacy release gates
 

@@ -62,6 +62,14 @@ npm --prefix gui run electron:dev
 
 The assistant can use a loopback OpenAI-compatible provider or an HTTPS provider configured by environment variable. Credentials stay in the main-process service environment and are never sent to the renderer.
 
+### Installed FreeChain assistant
+
+The installed FreeChain provider uses `http://127.0.0.1:4853/v1` with bearer authentication. The desktop first loads an encrypted record, then imports in order from the process `FREECHAIN_ACCESS_KEY`, an explicitly configured environment file, and the allowlisted per-user FreeChain environment file. No credential value is shown in the interface or stored in the repository.
+
+Electron `safeStorage` protects the saved record for the current Windows user, and Electron user data contains ciphertext only. Plaintext is limited to Electron main-process memory and the owned Python control child environment. Re-import replaces the saved record only after protected persistence succeeds. Clear reports success only when deletion succeeds or no record remains, and a successful change restarts only the owned control service.
+
+Before another person uses the same Windows account, clear the saved key. The Assistant reports credential missing, service unreachable, authentication failed, invalid model response, or ready with a real model count. It does not invent an `auto` model when recovery is required. See [docs/ASSISTANT.md](docs/ASSISTANT.md) for recovery steps and verification limits.
+
 ## Useful commands
 
 ```powershell
