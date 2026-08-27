@@ -88,9 +88,13 @@ class ControlServiceManager {
     if (this.startPromise) return this.startPromise;
     this.startPromise = new Promise((resolve, reject) => {
       const token = crypto.randomBytes(32).toString('base64url');
+      const pythonPath = [
+        projectRoot,
+        path.join(projectRoot, 'python-runtime'),
+      ].join(path.delimiter);
       const env = {
         ...process.env,
-        PYTHONPATH: projectRoot,
+        PYTHONPATH: pythonPath,
         EXPEDIENT_CONTROL_TOKEN: token,
         EXPEDIENT_DATA_DIR: dataRoot,
         ONLY_CLI_NODE: nodeExecutable,

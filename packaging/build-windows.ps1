@@ -15,7 +15,8 @@
 param(
     [string]$Version,
     [switch]$SkipOnlyCliInstall,
-    [switch]$SkipGuiBuild
+    [switch]$SkipGuiBuild,
+    [switch]$SkipPythonRuntimeInstall
 )
 
 $ErrorActionPreference = 'Stop'
@@ -23,6 +24,7 @@ $RepoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $GuiDir = Join-Path $RepoRoot 'gui'
 $ReleaseDir = Join-Path $RepoRoot 'release'
 $StagingRoot = Join-Path ([IO.Path]::GetTempPath()) 'expedient-employment-builder'
+$PythonRuntimeDir = Join-Path $RepoRoot 'python-runtime'
 
 if (Test-Path -LiteralPath $StagingRoot) {
     $resolvedStageRoot = (Resolve-Path -LiteralPath $StagingRoot).Path
@@ -57,6 +59,23 @@ try {
         Write-Host 'Installing pinned only-cli runtime without optional fingerprint transport...'
         & npm run only-cli:install
         if ($LASTEXITCODE -ne 0) { throw 'only-cli runtime install failed.' }
+    }
+    if (-not $SkipPythonRuntimeInstall) {
+        if (Test-Path -LiteralPath $PythonRuntimeDir) {
+            Remove-Item -LiteralPath $PythonRuntimeDir -Recurse -Force
+        }
+        New-Item -ItemType Directory -Path $PythonRuntimeDir | Out-Null
+        $pyLauncher = Get-Command py.exe -ErrorAction SilentlyContinue
+        Write-Host 'Installing the pinned Windows timezone runtime...'
+        if ($pyLauncher) {
+            & $pyLauncher.Source -3 -m pip install --disable-pip-version-check --no-compile --no-deps --target $PythonRuntimeDir 'tzdata==2026.3'
+        } else {
+            $pythonCommand = (Get-Command python.exe -ErrorAction Stop).Source
+            & $pythonCommand -m pip install --disable-pip-version-check --no-compile --no-deps --target $PythonRuntimeDir 'tzdata==2026.3'
+        }
+        if ($LASTEXITCODE -ne 0) { throw 'tzdata runtime install failed.' }
+    } elseif (-not (Test-Path -LiteralPath (Join-Path $PythonRuntimeDir 'tzdata'))) {
+        throw 'SkipPythonRuntimeInstall was requested but python-runtime/tzdata is missing.'
     }
     if (-not $SkipGuiBuild) {
         Write-Host 'Building the GUI (npm run build)...'

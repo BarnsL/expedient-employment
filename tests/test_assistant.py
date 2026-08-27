@@ -193,14 +193,14 @@ class AssistantTests(unittest.TestCase):
             messages=({"role": "user", "content": "read"},),
             tools=(),
         )
-        with patch.dict(os.environ, {"TEST_PROVIDER_KEY": "configured-test-secret"}):
+        with patch.dict(os.environ, {"TEST_PROVIDER_KEY": "fixture-key"}):
             self.assertTrue(provider.readiness()["ready"])
             self.assertEqual(provider.models(), ["model-a"])
             response = provider.complete(request)
 
         self.assertEqual(response.tool_calls[0].name, "web.only_cli.read")
-        self.assertNotIn("configured-test-secret", str(response))
-        self.assertEqual(seen[-1]["headers"]["Authorization"], "Bearer configured-test-secret")
+        self.assertNotIn("fixture-key", str(response))
+        self.assertEqual(seen[-1]["headers"]["Authorization"], "Bearer fixture-key")
 
     def test_openai_provider_rejects_plaintext_remote_base_url(self) -> None:
         with self.assertRaises(ProviderError):

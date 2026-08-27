@@ -50,6 +50,13 @@ extraResources:
     to: pipeline/only-cli-runtime/node_modules
     filter:
       - "**/*"
+  - from: ../python-runtime
+    to: pipeline/python-runtime
+    filter:
+      - "tzdata/**"
+      - "tzdata-*.dist-info/**"
+      - "!**/__pycache__/**"
+      - "!**/*.pyc"
 
 # Windows: portable zip plus an unpacked dir that installer/windows.iss turns
 # into the Inno Setup installer. No NSIS target on purpose.

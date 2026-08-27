@@ -45,6 +45,10 @@ test('manager keeps bearer token out of public status and kills its child', asyn
 
   assert.deepEqual(status, { ready: true, port: 32123 });
   assert.ok(captured.options.env.EXPEDIENT_CONTROL_TOKEN);
+  assert.equal(
+    captured.options.env.PYTHONPATH,
+    ['C:\\app\\pipeline', 'C:\\app\\pipeline\\python-runtime'].join(require('node:path').delimiter),
+  );
   assert.equal(JSON.stringify(status).includes(captured.options.env.EXPEDIENT_CONTROL_TOKEN), false);
   await manager.request('GET', '/v1/health');
   assert.equal(requests[0].token, captured.options.env.EXPEDIENT_CONTROL_TOKEN);

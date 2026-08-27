@@ -21,6 +21,11 @@ Its optional native fingerprint-impersonation transport is omitted from the
 installed and packaged runtime. The Node native transport remains available,
 including only-cli's public-page safety checks and challenge detection.
 
+The Windows desktop package also bundles `tzdata 2026.3` from the Python
+Software Foundation under Apache License 2.0. This is the standard IANA
+timezone fallback used by Python's `zoneinfo` module on systems without a
+machine-level timezone database: https://pypi.org/project/tzdata/
+
 This project can integrate with, but does not vendor, package, or modify, WebClaw:
 
 - Project: https://github.com/0xMassi/webclaw

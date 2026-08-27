@@ -15,5 +15,6 @@ config/*.local.json
 dist/
 /build/
 release/
+/python-runtime/
 *.egg-info/
 .worktrees/

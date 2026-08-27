@@ -30,12 +30,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\packaging\build-windows.ps
 ```
 
 After a successful dependency install and GUI build, packaging-only retries can
-use `-SkipOnlyCliInstall -SkipGuiBuild`. The script refuses the GUI skip when
-the production entry file is missing.
+use `-SkipOnlyCliInstall -SkipPythonRuntimeInstall -SkipGuiBuild`. The script
+refuses either runtime skip when its required files are missing, and refuses the
+GUI skip when the production entry file is missing.
 
 The script will:
 
-1. Run `npm run build` in `gui/` (installing GUI dependencies first if needed).
+1. Install the pinned only-cli runtime and `tzdata==2026.3`, then run
+   `npm run build` in `gui/` (installing GUI dependencies first if needed).
 2. Run `npx --yes electron-builder --config electron-builder.yml --win dir zip`
    from `gui/`. Temporary Electron extraction is placed under the operating
    system temporary directory so source-tree watchers cannot lock its rename.
@@ -70,6 +72,7 @@ portable zip is still produced and usable on its own.
 into `resources/pipeline/` inside the packaged app:
 
 - `job_pipeline/` (without `__pycache__`)
+- `python-runtime/tzdata` (the pinned IANA timezone fallback, staged at the repository root)
 - `run.ps1`, `run.cmd`, `scripts/`
 - `config/*.json` (excluding `*.local.json` — user-private config never ships)
 - `docs/`, `README.md`, `LICENSE`, `THIRD_PARTY_NOTICES.md`

@@ -16,7 +16,9 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
 ]
-dependencies = []
+dependencies = [
+  "tzdata==2026.3; platform_system == 'Windows'",
+]
 
 [project.optional-dependencies]
 jobspy = ["python-jobspy==1.1.82"]
