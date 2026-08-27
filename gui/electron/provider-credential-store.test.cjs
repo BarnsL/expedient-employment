@@ -137,3 +137,39 @@ test('failed re-import keeps the existing encrypted credential visible and clear
     fs.rmSync(userDataPath, { recursive: true, force: true });
   }
 });
+
+test('failed replacement persistence retains the prior encrypted credential state', () => {
+  const userDataPath = fs.mkdtempSync(path.join(os.tmpdir(), 'expedient-provider-replacement-failure-'));
+  const environment = { FREECHAIN_ACCESS_KEY: 'synthetic-provider-key-one' };
+  const safeStorage = fakeSafeStorage();
+  let renameCalls = 0;
+  const fileSystem = {
+    ...fs,
+    renameSync: (source, destination) => {
+      renameCalls += 1;
+      if (renameCalls === 2) throw new Error('synthetic replacement failure');
+      return fs.renameSync(source, destination);
+    },
+  };
+  const store = new ProviderCredentialStore({
+    userDataPath,
+    safeStorage,
+    environment,
+    fileSystem,
+  });
+
+  try {
+    store.importFromEnvironment();
+    const persistedPath = path.join(userDataPath, 'provider-credential.json');
+    const priorRecord = fs.readFileSync(persistedPath, 'utf8');
+    environment.FREECHAIN_ACCESS_KEY = 'synthetic-provider-key-two';
+
+    assert.deepEqual(store.reimportFromEnvironment(), { available: true, source: 'environment' });
+    assert.equal(store.saved(), true);
+    assert.equal(store.credential(), 'synthetic-provider-key-one');
+    assert.equal(fs.readFileSync(persistedPath, 'utf8'), priorRecord);
+    assert.equal(store.clear(), true);
+  } finally {
+    fs.rmSync(userDataPath, { recursive: true, force: true });
+  }
+});

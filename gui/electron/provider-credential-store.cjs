@@ -155,6 +155,11 @@ class ProviderCredentialStore {
       this.setUnavailable();
       return this.status();
     }
+    const priorState = {
+      credential: this.currentCredential,
+      source: this.currentSource,
+      saved: this.savedCredential,
+    };
     let temporaryPath = null;
     try {
       const ciphertext = this.safeStorage.encryptString(credential);
@@ -182,7 +187,13 @@ class ProviderCredentialStore {
       if (temporaryPath) {
         try { this.fileSystem.rmSync(temporaryPath, { force: true }); } catch { /* best effort */ }
       }
-      this.setUnavailable();
+      if (priorState.saved && priorState.credential) {
+        this.currentCredential = priorState.credential;
+        this.currentSource = priorState.source;
+        this.savedCredential = true;
+      } else {
+        this.setUnavailable();
+      }
       return this.status();
     }
   }

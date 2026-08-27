@@ -23,7 +23,7 @@ The installed FreeChain provider uses `http://127.0.0.1:4853/v1` with bearer aut
 
 The desktop first uses a valid encrypted record. When no saved record is available, it imports in order from the process `FREECHAIN_ACCESS_KEY`, an explicitly configured environment file, and the allowlisted per-user FreeChain environment file. Electron `safeStorage` protects the saved value at the current Windows user boundary, and Electron user data stores ciphertext only. Plaintext is limited to Electron main-process memory and the owned Python control child environment.
 
-Re-import writes a replacement record only after protected persistence succeeds. A missing replacement leaves the prior encrypted credential visible and clearable. Clear reports success only after deletion succeeds or the record is already absent. Successful credential changes restart only the owned control service. On a shared Windows account, clear the saved key before another person uses the account.
+Re-import writes a replacement record only after protected persistence succeeds. A missing replacement or protected-write failure leaves the prior encrypted credential visible and clearable. Clear reports success only after deletion succeeds or the record is already absent. Successful credential changes restart only the owned control service. On a shared Windows account, clear the saved key before another person uses the account.
 
 Installed release acceptance verifies that the encrypted record can authenticate a fresh app process while the original import file is temporarily unavailable. The check also confirms that the plaintext credential is absent from the encrypted record and assistant database before restoring the import file.
 
