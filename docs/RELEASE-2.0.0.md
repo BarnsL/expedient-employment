@@ -40,11 +40,13 @@ Re-import replaces the protected record only after a successful write. Clear doe
 
 Readiness distinguishes a missing credential, an unreachable service, authentication failure, an invalid model response, and a ready state with a real model count. This corrects the earlier chat failure, where the app used port 8000 without the required credential while the installed service used port 4853 with bearer authentication. The former interface also showed a fake `auto` model after model loading failed.
 
+If the advertised `auto` route fails, the assistant probes the authenticated model catalog and makes a bounded recovery attempt with up to four advertised concrete models. It never automatically selects preview or stealth routes. A successful recovery model is reused for later tool rounds in the same app process.
+
 ## Verification requirements
 
 Release verification includes the complete Python suite, renderer tests and build, Electron tests, dependency audits, static analysis, tracked-source and packaged-payload privacy scans, three synthetic recruiting trials, installed control-service smoke tests, Start Menu verification, and a visible app launch.
 
-Committed evidence covers unit, React, Electron, lint, and production-build checks for credential persistence, readiness, and the safe Assistant controls. Live credential mutation and installed two-launch chat recovery are not claimed here. Task 6 owns that final installed acceptance check.
+Committed evidence covers unit, React, Electron, lint, and production-build checks for credential persistence, readiness, and the safe Assistant controls. Installed acceptance used the packaged Windows application and confirmed a real 34-model readiness result, an exact chat reply through automatic model fallback, and a second exact chat reply after a full app restart with the original import file temporarily unavailable. The source file was restored immediately after the check. The saved record contained only the expected encrypted-record fields, and neither that record nor the assistant database contained the plaintext credential. The Start Menu shortcut and installed executable were also verified.
 
 The Windows package includes the pinned Python timezone fallback required for named daily schedules on systems without an IANA timezone database.
 Scheduler storage is synchronized across the loopback service's concurrent request threads.

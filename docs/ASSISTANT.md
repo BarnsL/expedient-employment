@@ -78,7 +78,9 @@ The Assistant presents these states without inventing a model:
 
 The earlier chat failure came from targeting port 8000 without the required credential while the installed service uses port 4853 with bearer authentication. The prior interface also masked failed model loading by presenting a fake `auto` state. The current interface keeps model-dependent actions unavailable until readiness and a real model list recover.
 
-Committed unit, React, Electron, lint, and build checks cover the documented contracts. Installed two-launch chat recovery is a separate live acceptance check and remains pending Task 6.
+When an advertised `auto` completion fails, the provider makes one authenticated model-list request and tries at most four advertised concrete recovery models. Preview and stealth routes are excluded from automatic selection. A working recovery model is cached for the current provider process so later tool rounds do not repeat the failed route.
+
+Committed unit, React, Electron, lint, and build checks cover the documented contracts. Installed acceptance also proves an exact automatic-fallback response and an exact post-restart response while the original credential import file is unavailable. The protected record remains the only credential source during that restart.
 
 ## Queue controls
 

@@ -25,6 +25,8 @@ The desktop first uses a valid encrypted record. When no saved record is availab
 
 Re-import writes a replacement record only after protected persistence succeeds. Clear reports success only after deletion succeeds or the record is already absent. Successful credential changes restart only the owned control service. On a shared Windows account, clear the saved key before another person uses the account.
 
+Installed release acceptance verifies that the encrypted record can authenticate a fresh app process while the original import file is temporarily unavailable. The check also confirms that the plaintext credential is absent from the encrypted record and assistant database before restoring the import file.
+
 ## Local service boundary
 
 - The service binds only to loopback on a random port.
