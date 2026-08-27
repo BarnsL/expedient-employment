@@ -71,17 +71,17 @@ function installDesktopApi(overrides: Partial<DesktopApiDouble> = {}) {
     providerCredentialStatus: vi.fn().mockResolvedValue({
       configured: false,
       saved: false,
-      source: 'none',
+      source: 'unavailable',
     }),
     providerCredentialReimport: vi.fn().mockResolvedValue({
       configured: false,
       saved: false,
-      source: 'none',
+      source: 'unavailable',
     }),
     providerCredentialClear: vi.fn().mockResolvedValue({
       configured: false,
       saved: false,
-      source: 'none',
+      source: 'unavailable',
     }),
     assistantProviders: vi.fn().mockResolvedValue([unavailableProvider]),
     assistantModels: vi.fn().mockResolvedValue([]),
@@ -197,12 +197,12 @@ describe('assistant provider readiness and credential controls', () => {
   it('re-imports a local key and refreshes saved status, readiness, and real models', async () => {
     installDesktopApi({
       providerCredentialStatus: vi.fn()
-        .mockResolvedValueOnce({ configured: false, saved: false, source: 'none' })
-        .mockResolvedValue({ configured: true, saved: true, source: 'encrypted-store' }),
+        .mockResolvedValueOnce({ configured: false, saved: false, source: 'unavailable' })
+        .mockResolvedValue({ configured: true, saved: true, source: 'environment' }),
       providerCredentialReimport: vi.fn().mockResolvedValue({
         configured: true,
         saved: true,
-        source: 'encrypted-store',
+        source: 'environment',
       }),
       assistantProviders: vi.fn()
         .mockResolvedValueOnce([unavailableProvider])
@@ -218,6 +218,7 @@ describe('assistant provider readiness and credential controls', () => {
     expect(await screen.findByText('Provider ready')).toBeVisible();
     expect(screen.getByText('1 model')).toBeVisible();
     expect(screen.getByText(/encrypted and saved for the current Windows user/i)).toBeVisible();
+    expect(screen.getByText(/source: process environment/i)).toBeVisible();
     expect(screen.getByRole('status')).toHaveTextContent(/local key re-imported/i);
     expect(screen.getByRole('textbox', { name: 'Message' })).toBeEnabled();
   });
@@ -229,8 +230,8 @@ describe('assistant provider readiness and credential controls', () => {
     });
     installDesktopApi({
       providerCredentialStatus: vi.fn()
-        .mockResolvedValueOnce({ configured: true, saved: true, source: 'encrypted-store' })
-        .mockResolvedValue({ configured: false, saved: false, source: 'none' }),
+        .mockResolvedValueOnce({ configured: true, saved: true, source: 'saved' })
+        .mockResolvedValue({ configured: false, saved: false, source: 'unavailable' }),
       providerCredentialClear: vi.fn().mockReturnValue(clearPromise),
       assistantProviders: vi.fn()
         .mockResolvedValueOnce([readyProvider])
@@ -249,7 +250,7 @@ describe('assistant provider readiness and credential controls', () => {
 
     expect(screen.getByRole('button', { name: 'Clearing saved key' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Re-import local key' })).toBeDisabled();
-    resolveClear({ configured: false, saved: false, source: 'none' });
+    resolveClear({ configured: false, saved: false, source: 'unavailable' });
 
     expect(await screen.findByText('Provider needs attention')).toBeVisible();
     expect(screen.getByText('No verified models')).toBeVisible();
@@ -270,6 +271,110 @@ describe('assistant provider readiness and credential controls', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'The local key could not be re-imported. Try again or refresh provider readiness.',
     );
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
     expect(screen.getByRole('button', { name: 'Re-import local key' })).toBeEnabled();
+  });
+
+  it('treats a resolved unsaved re-import status as a failure and keeps actions disabled', async () => {
+    installDesktopApi({
+      providerCredentialReimport: vi.fn().mockResolvedValue({
+        configured: true,
+        saved: false,
+        source: 'configured file',
+      }),
+    });
+
+    render(<Assistant />);
+    expect(await screen.findByText('Provider needs attention')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Re-import local key' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The local key was found but could not be saved. Check local encryption availability and try again.',
+    );
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+    expect(screen.getByRole('button', { name: 'New conversation' })).toBeDisabled();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBeDisabled();
+  });
+
+  it('treats a resolved saved clear status as a failure and keeps actions disabled', async () => {
+    installDesktopApi({
+      providerCredentialStatus: vi.fn().mockResolvedValue({
+        configured: true,
+        saved: true,
+        source: 'saved',
+      }),
+      providerCredentialClear: vi.fn().mockResolvedValue({
+        configured: true,
+        saved: true,
+        source: 'saved',
+      }),
+      assistantProviders: vi.fn().mockResolvedValue([readyProvider]),
+      assistantModels: vi.fn().mockResolvedValue(['freechain/auto']),
+      assistantConversations: vi.fn().mockResolvedValue([conversation]),
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(<Assistant />);
+    expect(await screen.findByText('Provider ready')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear saved key' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The saved key could not be cleared. Try again before another person uses this account.',
+    );
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+    expect(screen.getByRole('button', { name: 'New conversation' })).toBeDisabled();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBeDisabled();
+  });
+
+  it('keeps actions disabled when provider refresh rejects after a successful clear', async () => {
+    installDesktopApi({
+      providerCredentialStatus: vi.fn()
+        .mockResolvedValueOnce({ configured: true, saved: true, source: 'saved' })
+        .mockResolvedValue({ configured: false, saved: false, source: 'unavailable' }),
+      providerCredentialClear: vi.fn().mockResolvedValue({
+        configured: false,
+        saved: false,
+        source: 'unavailable',
+      }),
+      assistantProviders: vi.fn()
+        .mockResolvedValueOnce([readyProvider])
+        .mockRejectedValue(new Error()),
+      assistantModels: vi.fn().mockResolvedValue(['freechain/auto']),
+      assistantConversations: vi.fn().mockResolvedValue([conversation]),
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(<Assistant />);
+    expect(await screen.findByText('Provider ready')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear saved key' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The saved key was cleared, but provider readiness could not be refreshed. Refresh provider readiness to continue.',
+    );
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+    expect(screen.getByText('No verified models')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'New conversation' })).toBeDisabled();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBeDisabled();
+  });
+
+  it.each([
+    ['saved', 'Encrypted local storage'],
+    ['configured file', 'Configured local file'],
+    ['FreeChain file', 'Local FreeChain file'],
+    ['environment', 'Process environment'],
+    ['unavailable', 'Unavailable'],
+    ['unexpected source', 'Unavailable'],
+  ])('maps producer source %s to the safe label %s', async (source, label) => {
+    installDesktopApi({
+      providerCredentialStatus: vi.fn().mockResolvedValue({
+        configured: source !== 'unavailable',
+        saved: source !== 'unavailable',
+        source,
+      }),
+    });
+
+    render(<Assistant />);
+
+    expect(await screen.findByText(new RegExp(`Source: ${label}`, 'i'))).toBeVisible();
   });
 });

@@ -50,12 +50,15 @@ function canUseProvider(readiness?: ProviderReadiness): boolean {
 
 function credentialSourceLabel(source?: string): string {
   switch (source) {
-    case 'encrypted-store':
+    case 'saved':
       return 'Encrypted local storage';
+    case 'configured file':
+      return 'Configured local file';
+    case 'FreeChain file':
+      return 'Local FreeChain file';
     case 'environment':
-      return 'Local key import';
-    case 'none':
-      return 'None';
+      return 'Process environment';
+    case 'unavailable':
     default:
       return 'Unavailable';
   }
@@ -99,6 +102,7 @@ export default function Assistant() {
   const [models, setModels] = useState<string[]>([]);
   const [model, setModel] = useState('');
   const [modelProbeFailed, setModelProbeFailed] = useState(false);
+  const [providerRefreshRequired, setProviderRefreshRequired] = useState(false);
   const [credential, setCredential] = useState<ProviderCredentialStatus | null>(null);
   const [credentialMutation, setCredentialMutation] = useState<'reimport' | 'clear' | null>(null);
   const [announcement, setAnnouncement] = useState('');
@@ -115,7 +119,10 @@ export default function Assistant() {
     () => providers.find((item) => item.name === provider),
     [provider, providers],
   );
-  const providerReady = canUseProvider(readiness) && !modelProbeFailed && models.length > 0;
+  const providerReady = canUseProvider(readiness)
+    && !modelProbeFailed
+    && !providerRefreshRequired
+    && models.length > 0;
   const conversationId = conversation?.id;
 
   const refreshTranscript = useCallback(async (id?: string) => {
@@ -135,11 +142,32 @@ export default function Assistant() {
     setProvider(snapshot.provider);
     setModels(snapshot.models);
     setModelProbeFailed(snapshot.modelProbeFailed);
+    setProviderRefreshRequired(false);
     setModel(
       preferredModel && snapshot.models.includes(preferredModel)
         ? preferredModel
         : snapshot.models[0] || '',
     );
+  };
+
+  const invalidateProviderRuntime = (status?: ProviderCredentialStatus) => {
+    if (status) setCredential(status);
+    setProviders((current) => current.map((item) => (
+      item.name === provider
+        ? {
+            ...item,
+            ready: false,
+            reachable: false,
+            authenticated: false,
+            model_count: 0,
+            credential_configured: status?.configured ?? item.credential_configured,
+          }
+        : item
+    )));
+    setModels([]);
+    setModel('');
+    setModelProbeFailed(true);
+    setProviderRefreshRequired(true);
   };
 
   const refreshProvider = async (name?: string, createIfReady = false) => {
@@ -172,9 +200,7 @@ export default function Assistant() {
     try {
       await refreshProvider(name, true);
     } catch {
-      setModels([]);
-      setModel('');
-      setModelProbeFailed(true);
+      invalidateProviderRuntime();
       setError('Provider readiness could not be refreshed. Try again after the local provider recovers.');
     } finally {
       setBusy(false);
@@ -211,9 +237,11 @@ export default function Assistant() {
         setEvents(nextEvents);
       } catch {
         if (active) {
+          setProviders([]);
           setModels([]);
           setModel('');
           setModelProbeFailed(true);
+          setProviderRefreshRequired(true);
           setError('The assistant could not connect safely. Refresh provider readiness to try again.');
         }
       } finally {
@@ -233,15 +261,50 @@ export default function Assistant() {
     setCredentialMutation(action);
     setAnnouncement('');
     setError('');
-    let credentialChanged = false;
+    if (action === 'clear') {
+      invalidateProviderRuntime();
+    }
     try {
-      if (action === 'reimport') {
-        await api.providerCredentialReimport();
-      } else {
-        await api.providerCredentialClear();
+      let status: ProviderCredentialStatus;
+      try {
+        status = action === 'reimport'
+          ? await api.providerCredentialReimport()
+          : await api.providerCredentialClear();
+      } catch {
+        setError(
+          action === 'reimport'
+            ? 'The local key could not be re-imported. Try again or refresh provider readiness.'
+            : 'The saved key could not be cleared. Try again before another person uses this account.',
+        );
+        return;
       }
-      credentialChanged = true;
-      const snapshot = await refreshProvider(provider, true);
+
+      const mutationSucceeded = action === 'reimport'
+        ? status.configured && status.saved
+        : !status.configured && !status.saved;
+      if (!mutationSucceeded) {
+        invalidateProviderRuntime(status);
+        setError(
+          action === 'reimport'
+            ? 'The local key was found but could not be saved. Check local encryption availability and try again.'
+            : 'The saved key could not be cleared. Try again before another person uses this account.',
+        );
+        return;
+      }
+
+      if (action === 'clear') invalidateProviderRuntime(status);
+      let snapshot: ProviderSnapshot;
+      try {
+        snapshot = await refreshProvider(provider, true);
+      } catch {
+        invalidateProviderRuntime(status);
+        setError(
+          action === 'reimport'
+            ? 'The local key was saved, but provider readiness could not be refreshed. Refresh provider readiness to continue.'
+            : 'The saved key was cleared, but provider readiness could not be refreshed. Refresh provider readiness to continue.',
+        );
+        return;
+      }
       const selectedReadiness = snapshot.providers.find((item) => item.name === snapshot.provider);
       const refreshedReady = canUseProvider(selectedReadiness)
         && !snapshot.modelProbeFailed
@@ -253,14 +316,6 @@ export default function Assistant() {
             : 'Local key re-imported. Provider still needs attention.'
           : 'Saved key cleared. Provider readiness and models refreshed.',
       );
-    } catch {
-      const message = credentialChanged
-        ? 'The local key changed, but provider readiness could not be refreshed. Refresh provider readiness to continue.'
-        : action === 'reimport'
-          ? 'The local key could not be re-imported. Try again or refresh provider readiness.'
-          : 'The saved key could not be cleared. Try again before another person uses this account.';
-      setError(message);
-      setAnnouncement(message);
     } finally {
       setCredentialMutation(null);
     }
@@ -384,7 +439,9 @@ export default function Assistant() {
       : credential.configured
         ? 'Available for this session, but not saved for the current Windows user.'
         : 'Provider key is not saved for the current Windows user.';
-  const recoveryText = !readiness?.credential_configured
+  const recoveryText = providerRefreshRequired
+    ? 'Refresh provider readiness to restore model-dependent actions.'
+    : !readiness?.credential_configured
     ? 'Re-import a local key, then refresh provider readiness.'
     : !readiness?.reachable
       ? 'Start or reconnect the local provider, then refresh provider readiness.'
@@ -496,7 +553,11 @@ export default function Assistant() {
 
           <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
             <div className="min-w-0 text-xs leading-5 text-slate-400">
-              <p className="break-words text-slate-300">{safeReadinessDetail(readiness)}</p>
+              <p className="break-words text-slate-300">
+                {providerRefreshRequired
+                  ? 'Provider readiness must be refreshed.'
+                  : safeReadinessDetail(readiness)}
+              </p>
               {recoveryText && <p className="mt-1 break-words text-amber-300">{recoveryText}</p>}
               <p className="mt-2 inline-flex max-w-full items-start gap-1.5 break-words text-slate-500">
                 <KeyRound className="mt-0.5 h-3.5 w-3.5 shrink-0" />

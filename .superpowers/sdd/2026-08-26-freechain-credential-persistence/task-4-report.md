@@ -81,3 +81,62 @@ The required Impeccable detector was run exactly once after the UI was complete.
 
 - The required `npm test -- --run` form emits an npm deprecation warning for the forwarded `--run` option, but Vitest still executes once and passes all tests.
 - Live credential mutation was intentionally not exercised. Task coverage uses mocked desktop contracts so no real credential or local credential location is accessed.
+
+## Fix round 1
+
+The review found three contract gaps. A resolved credential mutation was treated as success without validating its returned state, a failed refresh after clear could leave stale readiness visible, and credential source labels did not match the producer allowlist. Failure text was also duplicated between the polite status region and the alert.
+
+### Changes
+
+- Re-import now succeeds only when the returned status is both configured and saved.
+- Clear now succeeds only when the returned status is neither configured nor saved.
+- Clear invalidates local readiness and model state before the mutation and again after a valid response.
+- A mutation refresh failure invalidates readiness and models until a later refresh succeeds.
+- Rejected and resolved-failure mutations publish only a bounded alert. Successful mutations publish only to the polite status region.
+- The source label allowlist now matches the credential store producer values: `saved`, `configured file`, `FreeChain file`, `environment`, and `unavailable`.
+- Any unknown source remains `Unavailable` and is never rendered directly.
+
+### Fix-round TDD evidence
+
+Before the implementation change, the focused suite collected 17 tests: 8 passed and 9 failed for the expected review gaps. The failures covered real source labels, duplicate failure announcements, resolved unsaved re-import, resolved uncleared clear, and refresh rejection after a successful clear.
+
+After the implementation change, the focused suite passed 17 of 17 tests.
+
+### Fix-round verification
+
+| Check | Command | Result |
+|---|---|---|
+| Focused React | focused Assistant test command | Pass, 1 file, 17 tests |
+| Full React | `npm test -- --run` | Pass, 1 file, 17 tests |
+| Lint | `npm run lint` | Pass, exit 0, no warnings |
+| Production build | `npm run build` | Pass, 1,744 modules transformed |
+| Electron | `node --test electron/*.test.cjs` | Pass, 18 tests, 0 failures |
+| Diff whitespace | `git diff --check` | Pass |
+| Added email pattern scan | scoped added-line scan | 0 matches |
+| Added credential-shape scan | scoped added-line scan | 0 matches |
+| Added private-path scan | scoped added-line scan | 0 matches |
+| Added em dash scan | scoped added-line scan | 0 matches |
+| Obsolete source value scan | scoped Assistant source and tests | 0 matches |
+| Fake model fallback scan | scoped Assistant API and page source | 0 matches |
+| Prior flagged hover class | scoped class scan | 0 matches |
+
+The one-shot Impeccable detector was not rerun. Its previously flagged colored hover class remains absent.
+
+### Fix-round accessibility and error-state review
+
+- Successful mutation feedback appears only in the polite, atomic status region.
+- Failure feedback appears only in the alert, avoiding duplicate assistive announcements.
+- Mutation controls retain visible loading labels and disabled states.
+- New conversation, model selection, and message submission stay disabled after an uncertain mutation refresh.
+- Refresh remains available as the explicit recovery path, and a successful refresh clears the fail-closed state.
+- Status, recovery, and source information remain text-visible without depending on color.
+
+### Fix-round privacy review
+
+- Tests use only contract-shaped status objects and inert model names.
+- No real credential, ciphertext, credential location, raw provider exception, private path, or email was read or added.
+- Producer source strings are mapped through a fixed safe allowlist. Unknown strings collapse to `Unavailable`.
+
+### Fix-round constraint
+
+- Live credential mutation remains intentionally untested. The mocked desktop coverage exercises success, rejection, resolved failure, and post-mutation refresh failure without touching a real local credential.
