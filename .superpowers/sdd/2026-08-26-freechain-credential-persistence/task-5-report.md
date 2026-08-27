@@ -34,3 +34,15 @@ Committed reports record passing unit, React, Electron, lint, and production-bui
 ## Concerns and follow-up
 
 The documentation intentionally does not claim installed two-launch chat recovery. Task 6 must perform and record that live acceptance check without exposing credential material.
+
+## Fix round 1: Manual re-import and restart semantics
+
+The first Task 5 wording incorrectly described manual re-import as repeating the startup encrypted-store lookup and implied that a control-service restart depended on a successful re-import. The current implementation shows a narrower manual lookup and an unconditional restart after the re-import IPC attempt.
+
+- Startup loads the encrypted record before considering the three import sources.
+- Manual re-import checks only the process `FREECHAIN_ACCESS_KEY`, the explicitly configured environment file, and the allowlisted per-user FreeChain environment file, in that order.
+- When no valid candidate exists or protected persistence fails, manual re-import leaves the credential status unavailable.
+- The current re-import IPC handler restarts only the owned control service after every attempt, including those unavailable outcomes.
+- Clear restarts that service only after deletion succeeds or the record is already absent. A failed deletion preserves the existing credential state and does not restart the service.
+
+The corrected `docs/ASSISTANT.md` wording was reviewed against the current credential store and IPC handlers. The fix changes no implementation claim outside the documented manual re-import and restart behavior.

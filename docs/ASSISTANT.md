@@ -54,11 +54,13 @@ The provider transport limits request duration and response size. Provider error
 
 The installed FreeChain contract uses `http://127.0.0.1:4853/v1` with bearer authentication. The assistant never displays, logs, or documents a credential value.
 
-On first use, the desktop checks sources in this order: an existing encrypted record, the process `FREECHAIN_ACCESS_KEY`, an explicitly configured environment file, then the allowlisted per-user FreeChain environment file. A valid first source stops the search. Re-import repeats that ordered import and replaces the saved encrypted record only after a successful protected write.
+On first use, the desktop checks sources in this order: an existing encrypted record, the process `FREECHAIN_ACCESS_KEY`, an explicitly configured environment file, then the allowlisted per-user FreeChain environment file. A valid first source stops the search.
+
+Manual re-import does not check the encrypted record. It checks only the process `FREECHAIN_ACCESS_KEY`, the explicitly configured environment file, then the allowlisted per-user FreeChain environment file. A valid first source replaces the saved encrypted record only after a successful protected write. If no valid import candidate exists, or protected persistence fails, the credential status is unavailable.
 
 Electron `safeStorage` uses the current Windows user protection boundary. Electron user data contains ciphertext only. Plaintext is limited to Electron main-process memory and the environment of the Python control child owned by the application.
 
-Clear removes the encrypted record only when deletion succeeds or the record is already absent. A deletion failure leaves the existing state intact, does not report success, and does not restart a service. Successful re-import and clear operations restart only the application-owned control service. They do not alter unrelated processes.
+Clear removes the encrypted record only when deletion succeeds or the record is already absent. A deletion failure leaves the existing state intact, does not report success, and does not restart a service. The current IPC handler restarts only the application-owned control service after every manual re-import attempt, including when no candidate exists or protected persistence fails. It restarts after clear only when clear succeeds. These operations do not alter unrelated processes.
 
 If another person will use the same Windows account, clear the saved key first.
 
