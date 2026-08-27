@@ -1,0 +1,211 @@
+"""Behavior tests for durable queued, image-aware, tool-using conversations."""
+
+from __future__ import annotations
+
+import os
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+from job_pipeline.assistant import (
+    AssistantRequest,
+    AssistantResponse,
+    ConversationService,
+    OpenAICompatibleProvider,
+    ProviderError,
+    ToolCall,
+)
+from job_pipeline.tool_broker import ToolBroker, ToolPolicy, ToolResult, ToolSpec
+
+
+class ScriptedProvider:
+    name = "scripted"
+
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.requests: list[AssistantRequest] = []
+
+    def readiness(self):
+        return {"ready": True, "detail": "test provider ready"}
+
+    def models(self):
+        return ["scripted-model"]
+
+    def complete(self, request):
+        self.requests.append(request)
+        return self.responses.pop(0)
+
+
+class AssistantTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+
+    def tearDown(self) -> None:
+        self.temp.cleanup()
+
+    def service(self, provider=None, broker=None) -> ConversationService:
+        return ConversationService(
+            self.root / "assistant.sqlite3",
+            self.root / "attachments",
+            providers={"scripted": provider or ScriptedProvider([AssistantResponse("done")])},
+            broker=broker or ToolBroker(),
+        )
+
+    def test_queue_edit_cancel_retry_and_clear_are_durable(self) -> None:
+        service = self.service()
+        try:
+            conversation = service.create_conversation("scripted", "scripted-model", "Search")
+            first = service.enqueue(conversation.id, "first")
+            second = service.enqueue(conversation.id, "second")
+            edited = service.edit(second.id, "second revised")
+            cancelled = service.cancel(second.id)
+            retried = service.retry(cancelled.id)
+
+            self.assertEqual(edited.content, "second revised")
+            self.assertEqual(cancelled.status, "cancelled")
+            self.assertEqual(retried.status, "queued")
+            self.assertEqual(retried.retry_of, cancelled.id)
+            self.assertLess(first.sequence, second.sequence)
+            self.assertEqual(service.queue(conversation.id)[0].id, first.id)
+
+            service.clear_transcript(conversation.id)
+            self.assertEqual(service.messages(conversation.id), [])
+        finally:
+            service.close()
+
+    def test_image_attachments_are_content_addressed_bounded_and_linked(self) -> None:
+        service = self.service()
+        try:
+            conversation = service.create_conversation("scripted", "scripted-model")
+            image = service.attach(conversation.id, "context.png", "image/png", b"\x89PNG" + b"x" * 32)
+            queued = service.enqueue(conversation.id, "use this image", [image.id])
+            self.assertEqual(len(image.digest), 64)
+            self.assertTrue(Path(image.local_path).is_file())
+            self.assertEqual(service.attachments(queued.id)[0].id, image.id)
+
+            with self.assertRaises(ValueError):
+                service.attach(conversation.id, "bad.txt", "text/plain", b"no")
+            with self.assertRaises(ValueError):
+                service.enqueue(conversation.id, "too many", [image.id] * 6)
+        finally:
+            service.close()
+
+    def test_provider_readiness_and_model_listing_are_structured(self) -> None:
+        service = self.service()
+        try:
+            self.assertEqual(service.providers()[0]["name"], "scripted")
+            self.assertTrue(service.providers()[0]["ready"])
+            self.assertEqual(service.provider_models("scripted"), ["scripted-model"])
+        finally:
+            service.close()
+
+    def test_only_cli_tool_call_runs_from_queue(self) -> None:
+        calls: list[dict] = []
+
+        def read_handler(arguments, _context):
+            calls.append(arguments)
+            return ToolResult(data={"text": "Recruiting Coordinator posting"}, summary="page read")
+
+        broker = ToolBroker([ToolSpec(
+            name="web.only_cli.read",
+            description="Read the current only-cli page.",
+            policy=ToolPolicy.READ,
+            input_schema={
+                "type": "object",
+                "properties": {"args": {"type": "array", "items": {"type": "string"}}},
+                "required": ["args"],
+                "additionalProperties": False,
+            },
+            handler=read_handler,
+        )])
+        provider = ScriptedProvider([
+            AssistantResponse(
+                "",
+                tool_calls=(ToolCall("call-1", "web.only_cli.read", {"args": ["main"]}),),
+            ),
+            AssistantResponse("I found a recruiting coordinator posting."),
+        ])
+        service = self.service(provider, broker)
+        try:
+            conversation = service.create_conversation("scripted", "scripted-model")
+            queued = service.enqueue(conversation.id, "read the page")
+            completed = service.run_next(conversation.id)
+
+            self.assertEqual(completed.id, queued.id)
+            self.assertEqual(completed.status, "completed")
+            self.assertEqual(calls, [{"args": ["main"]}])
+            self.assertEqual(service.messages(conversation.id)[-1].role, "assistant")
+            event_types = [event["event_type"] for event in service.events(conversation.id)]
+            self.assertIn("tool_start", event_types)
+            self.assertIn("tool_result", event_types)
+            self.assertIn("message_complete", event_types)
+            self.assertEqual(service.tool_invocations()[0]["tool_name"], "web.only_cli.read")
+            self.assertEqual(len(provider.requests), 2)
+            self.assertEqual(provider.requests[-1].tool_results[0]["tool_call_id"], "call-1")
+        finally:
+            service.close()
+
+    def test_two_messages_run_in_queue_order_and_cancelled_message_never_runs(self) -> None:
+        provider = ScriptedProvider([AssistantResponse("one"), AssistantResponse("two")])
+        service = self.service(provider)
+        try:
+            conversation = service.create_conversation("scripted", "scripted-model")
+            one = service.enqueue(conversation.id, "one")
+            cancelled = service.enqueue(conversation.id, "cancel me")
+            two = service.enqueue(conversation.id, "two")
+            service.cancel(cancelled.id)
+
+            self.assertEqual(service.run_next(conversation.id).id, one.id)
+            self.assertEqual(service.run_next(conversation.id).id, two.id)
+            self.assertIsNone(service.run_next(conversation.id))
+            self.assertEqual([request.messages[-1]["content"] for request in provider.requests], ["one", "two"])
+        finally:
+            service.close()
+
+    def test_openai_compatible_provider_reads_key_from_environment_and_parses_tools(self) -> None:
+        seen: list[dict] = []
+
+        def transport(method, url, headers, body, timeout):
+            seen.append({"method": method, "url": url, "headers": headers, "body": body})
+            if url.endswith("/models"):
+                return {"data": [{"id": "model-a"}]}
+            return {
+                "choices": [{"message": {
+                    "content": "",
+                    "tool_calls": [{
+                        "id": "tc-1",
+                        "type": "function",
+                        "function": {"name": "web.only_cli.read", "arguments": "{\"args\":[]}"},
+                    }],
+                }}]
+            }
+
+        provider = OpenAICompatibleProvider(
+            "local-provider",
+            "http://127.0.0.1:9000/v1",
+            credential_env="TEST_PROVIDER_KEY",
+            transport=transport,
+        )
+        request = AssistantRequest(
+            model="model-a",
+            messages=({"role": "user", "content": "read"},),
+            tools=(),
+        )
+        with patch.dict(os.environ, {"TEST_PROVIDER_KEY": "configured-test-secret"}):
+            self.assertTrue(provider.readiness()["ready"])
+            self.assertEqual(provider.models(), ["model-a"])
+            response = provider.complete(request)
+
+        self.assertEqual(response.tool_calls[0].name, "web.only_cli.read")
+        self.assertNotIn("configured-test-secret", str(response))
+        self.assertEqual(seen[-1]["headers"]["Authorization"], "Bearer configured-test-secret")
+
+    def test_openai_provider_rejects_plaintext_remote_base_url(self) -> None:
+        with self.assertRaises(ProviderError):
+            OpenAICompatibleProvider("unsafe", "http://public.example/v1", credential_env="KEY")
+
+
+if __name__ == "__main__":
+    unittest.main()
