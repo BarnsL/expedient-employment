@@ -15,6 +15,7 @@ import type {
   AssistantEvent,
   AssistantMessage,
   ConversationRecord,
+  ProviderCredentialStatus,
   ProviderReadiness,
 } from '@/lib/api';
 
@@ -30,11 +31,77 @@ async function fileToBase64(file: File): Promise<string> {
   });
 }
 
+interface ProviderSnapshot {
+  credential: ProviderCredentialStatus;
+  providers: ProviderReadiness[];
+  provider: string;
+  models: string[];
+  modelProbeFailed: boolean;
+}
+
+function canUseProvider(readiness?: ProviderReadiness): boolean {
+  return Boolean(
+    readiness?.ready
+    && readiness.reachable
+    && readiness.authenticated
+    && readiness.model_count > 0,
+  );
+}
+
+function credentialSourceLabel(source?: string): string {
+  switch (source) {
+    case 'encrypted-store':
+      return 'Encrypted local storage';
+    case 'environment':
+      return 'Local key import';
+    case 'none':
+      return 'None';
+    default:
+      return 'Unavailable';
+  }
+}
+
+function safeReadinessDetail(readiness?: ProviderReadiness): string {
+  if (!readiness) return 'Provider readiness is unavailable.';
+  if (!readiness.credential_configured) return 'Provider key is not configured.';
+  if (!readiness.reachable) return 'Provider is unreachable.';
+  if (!readiness.authenticated) return 'Provider authorization failed.';
+  if (readiness.model_count < 1) return 'Provider returned no usable models.';
+  return readiness.ready ? 'Provider and model probe succeeded.' : 'Provider needs attention.';
+}
+
+async function providerSnapshot(preferredProvider?: string): Promise<ProviderSnapshot> {
+  const [credential, providers] = await Promise.all([
+    api.providerCredentialStatus(),
+    api.assistantProviders(),
+  ]);
+  const selected = providers.find((item) => item.name === preferredProvider)
+    || providers.find((item) => canUseProvider(item))
+    || providers[0];
+  const provider = selected?.name || preferredProvider || 'FreeChain';
+  let models: string[] = [];
+  let modelProbeFailed = false;
+  if (canUseProvider(selected)) {
+    try {
+      const values = await api.assistantModels(provider);
+      models = values.filter((item) => typeof item === 'string' && item.trim()).slice(0, 200);
+      modelProbeFailed = models.length === 0;
+    } catch {
+      modelProbeFailed = true;
+    }
+  }
+  return { credential, providers, provider, models, modelProbeFailed };
+}
+
 export default function Assistant() {
   const [providers, setProviders] = useState<ProviderReadiness[]>([]);
   const [provider, setProvider] = useState('FreeChain');
-  const [models, setModels] = useState<string[]>(['auto']);
-  const [model, setModel] = useState('auto');
+  const [models, setModels] = useState<string[]>([]);
+  const [model, setModel] = useState('');
+  const [modelProbeFailed, setModelProbeFailed] = useState(false);
+  const [credential, setCredential] = useState<ProviderCredentialStatus | null>(null);
+  const [credentialMutation, setCredentialMutation] = useState<'reimport' | 'clear' | null>(null);
+  const [announcement, setAnnouncement] = useState('');
   const [conversation, setConversation] = useState<ConversationRecord | null>(null);
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [events, setEvents] = useState<AssistantEvent[]>([]);
@@ -48,6 +115,7 @@ export default function Assistant() {
     () => providers.find((item) => item.name === provider),
     [provider, providers],
   );
+  const providerReady = canUseProvider(readiness) && !modelProbeFailed && models.length > 0;
   const conversationId = conversation?.id;
 
   const refreshTranscript = useCallback(async (id?: string) => {
@@ -61,16 +129,55 @@ export default function Assistant() {
     setEvents(nextEvents);
   }, [conversation?.id]);
 
-  const loadModels = async (name: string) => {
+  const applyProviderSnapshot = (snapshot: ProviderSnapshot, preferredModel?: string) => {
+    setCredential(snapshot.credential);
+    setProviders(snapshot.providers);
+    setProvider(snapshot.provider);
+    setModels(snapshot.models);
+    setModelProbeFailed(snapshot.modelProbeFailed);
+    setModel(
+      preferredModel && snapshot.models.includes(preferredModel)
+        ? preferredModel
+        : snapshot.models[0] || '',
+    );
+  };
+
+  const refreshProvider = async (name?: string, createIfReady = false) => {
+    const snapshot = await providerSnapshot(name || provider);
+    applyProviderSnapshot(snapshot, model);
+    if (snapshot.modelProbeFailed) {
+      setError('The provider model probe failed. Restore provider access, then refresh readiness.');
+    }
+    if (createIfReady && !conversation && snapshot.models.length > 0) {
+      const selectedReadiness = snapshot.providers.find((item) => item.name === snapshot.provider);
+      if (canUseProvider(selectedReadiness) && !snapshot.modelProbeFailed) {
+        const next = await api.assistantCreate({
+          provider: snapshot.provider,
+          model: snapshot.models[0],
+          title: 'Job hunting control',
+          allow_image_upload: shareImages,
+        });
+        setConversation(next);
+        setMessages([]);
+        setEvents([]);
+        setAttachments([]);
+      }
+    }
+    return snapshot;
+  };
+
+  const refreshProviderControls = async (name: string) => {
+    setBusy(true);
+    setError('');
     try {
-      const next = await api.assistantModels(name);
-      const values = next.length ? next : ['auto'];
-      setModels(values);
-      setModel(values[0]);
-    } catch (reason) {
-      setModels(['auto']);
-      setModel('auto');
-      setError(reason instanceof Error ? reason.message : 'Model refresh failed.');
+      await refreshProvider(name, true);
+    } catch {
+      setModels([]);
+      setModel('');
+      setModelProbeFailed(true);
+      setError('Provider readiness could not be refreshed. Try again after the local provider recovers.');
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -78,53 +185,86 @@ export default function Assistant() {
     let active = true;
     void (async () => {
       try {
-        const [nextProviders, conversations] = await Promise.all([
-          api.assistantProviders(),
-          api.assistantConversations(),
-        ]);
+        const conversations = await api.assistantConversations();
+        const current = conversations[0] || null;
+        const snapshot = await providerSnapshot(current?.provider);
         if (!active) return;
-        setProviders(nextProviders);
-        const nextProvider = nextProviders.find((item) => item.ready)?.name
-          || nextProviders[0]?.name
-          || 'FreeChain';
-        setProvider(nextProvider);
-        let nextModels: string[] = [];
-        try {
-          nextModels = await api.assistantModels(nextProvider);
-        } catch {
-          nextModels = ['auto'];
-        }
-        if (!active) return;
-        setModels(nextModels.length ? nextModels : ['auto']);
-        setModel(nextModels[0] || 'auto');
-        let current = conversations[0];
-        if (!current) {
-          current = await api.assistantCreate({
-            provider: nextProvider,
-            model: nextModels[0] || 'auto',
+        applyProviderSnapshot(snapshot, current?.model);
+        let activeConversation = current;
+        const selectedReadiness = snapshot.providers.find((item) => item.name === snapshot.provider);
+        if (!activeConversation && canUseProvider(selectedReadiness) && snapshot.models.length > 0) {
+          activeConversation = await api.assistantCreate({
+            provider: snapshot.provider,
+            model: snapshot.models[0],
             title: 'Job hunting control',
           });
         }
-        if (!active) return;
-        setConversation(current);
-        setProvider(current.provider);
-        setModel(current.model);
-        setShareImages(current.allow_image_upload);
+        if (!active || !activeConversation) return;
+        setConversation(activeConversation);
+        setShareImages(activeConversation.allow_image_upload);
         const [nextMessages, nextEvents] = await Promise.all([
-          api.assistantMessages(current.id),
-          api.assistantEvents(current.id),
+          api.assistantMessages(activeConversation.id),
+          api.assistantEvents(activeConversation.id),
         ]);
         if (!active) return;
         setMessages(nextMessages);
         setEvents(nextEvents);
-      } catch (reason) {
-        if (active) setError(reason instanceof Error ? reason.message : 'Assistant could not start.');
+      } catch {
+        if (active) {
+          setModels([]);
+          setModel('');
+          setModelProbeFailed(true);
+          setError('The assistant could not connect safely. Refresh provider readiness to try again.');
+        }
       } finally {
         if (active) setLoading(false);
       }
     })();
     return () => { active = false; };
   }, []);
+
+  const mutateCredential = async (action: 'reimport' | 'clear') => {
+    if (
+      action === 'clear'
+      && !window.confirm(
+        'Clear the encrypted key saved for the current Windows user? The provider will remain unavailable until a key is re-imported.',
+      )
+    ) return;
+    setCredentialMutation(action);
+    setAnnouncement('');
+    setError('');
+    let credentialChanged = false;
+    try {
+      if (action === 'reimport') {
+        await api.providerCredentialReimport();
+      } else {
+        await api.providerCredentialClear();
+      }
+      credentialChanged = true;
+      const snapshot = await refreshProvider(provider, true);
+      const selectedReadiness = snapshot.providers.find((item) => item.name === snapshot.provider);
+      const refreshedReady = canUseProvider(selectedReadiness)
+        && !snapshot.modelProbeFailed
+        && snapshot.models.length > 0;
+      setAnnouncement(
+        action === 'reimport'
+          ? refreshedReady
+            ? 'Local key re-imported. Provider is ready.'
+            : 'Local key re-imported. Provider still needs attention.'
+          : 'Saved key cleared. Provider readiness and models refreshed.',
+      );
+    } catch {
+      const message = credentialChanged
+        ? 'The local key changed, but provider readiness could not be refreshed. Refresh provider readiness to continue.'
+        : action === 'reimport'
+          ? 'The local key could not be re-imported. Try again or refresh provider readiness.'
+          : 'The saved key could not be cleared. Try again before another person uses this account.';
+      setError(message);
+      setAnnouncement(message);
+    } finally {
+      setCredentialMutation(null);
+    }
+  };
 
   useEffect(() => {
     if (!conversationId) return undefined;
@@ -135,6 +275,10 @@ export default function Assistant() {
   }, [conversationId, refreshTranscript]);
 
   const newConversation = async () => {
+    if (!providerReady || !model) {
+      setError('A ready provider with at least one verified model is required for a new conversation.');
+      return;
+    }
     setBusy(true);
     setError('');
     try {
@@ -148,8 +292,8 @@ export default function Assistant() {
       setMessages([]);
       setEvents([]);
       setAttachments([]);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Conversation could not be created.');
+    } catch {
+      setError('The conversation could not be created. Refresh provider readiness and try again.');
     } finally {
       setBusy(false);
     }
@@ -164,8 +308,8 @@ export default function Assistant() {
         await api.assistantRun(conversationId);
         await refreshTranscript(conversationId);
       }
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'The assistant queue stopped.');
+    } catch {
+      setError('The assistant queue stopped safely. Check provider readiness before retrying.');
     } finally {
       setBusy(false);
       await refreshTranscript(conversationId).catch(() => {});
@@ -173,7 +317,10 @@ export default function Assistant() {
   };
 
   const send = async (content: string) => {
-    if (!conversation) throw new Error('Create a conversation first.');
+    if (!conversation || !providerReady || !model) {
+      setError('Restore provider readiness and select a verified model before sending.');
+      throw new Error();
+    }
     setError('');
     await api.assistantSend(conversation.id, {
       content,
@@ -199,8 +346,8 @@ export default function Assistant() {
         }));
       }
       setAttachments((current) => [...current, ...uploaded]);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Image attachment failed.');
+    } catch {
+      setError('The image could not be attached. Try the file again after checking the local service.');
     }
   };
 
@@ -230,6 +377,23 @@ export default function Assistant() {
     setAttachments([]);
   };
 
+  const credentialStatusText = !credential
+    ? 'Checking saved key status.'
+    : credential.saved
+      ? 'Encrypted and saved for the current Windows user.'
+      : credential.configured
+        ? 'Available for this session, but not saved for the current Windows user.'
+        : 'Provider key is not saved for the current Windows user.';
+  const recoveryText = !readiness?.credential_configured
+    ? 'Re-import a local key, then refresh provider readiness.'
+    : !readiness?.reachable
+      ? 'Start or reconnect the local provider, then refresh provider readiness.'
+      : !readiness?.authenticated
+        ? 'Re-import a local key, then refresh provider readiness.'
+        : !providerReady
+          ? 'No verified models are available. Refresh provider readiness after the provider recovers.'
+          : '';
+
   return (
     <section className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-[1600px] flex-col gap-5">
       <header className="flex flex-wrap items-end justify-between gap-4">
@@ -242,7 +406,7 @@ export default function Assistant() {
         <div className="flex gap-2">
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || !conversation}
             onClick={() => void clear()}
             className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-700 px-3 text-xs text-slate-400 hover:bg-slate-900 hover:text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-400 disabled:opacity-40"
           >
@@ -251,7 +415,7 @@ export default function Assistant() {
           </button>
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || loading || Boolean(credentialMutation) || !providerReady || !model}
             onClick={() => void newConversation()}
             className="inline-flex h-9 items-center gap-2 rounded-md bg-cyan-300 px-3 text-xs font-semibold text-cyan-950 hover:bg-cyan-200 focus:outline-none focus:ring-2 focus:ring-cyan-100 disabled:opacity-40"
           >
@@ -267,11 +431,14 @@ export default function Assistant() {
             Provider
             <select
               value={provider}
+              disabled={loading || busy || Boolean(credentialMutation)}
               onChange={(event) => {
                 setProvider(event.target.value);
-                void loadModels(event.target.value);
+                setModels([]);
+                setModel('');
+                void refreshProviderControls(event.target.value);
               }}
-              className="mt-2 h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-cyan-400"
+              className="mt-2 h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {providers.map((item) => <option key={item.name}>{item.name}</option>)}
             </select>
@@ -280,56 +447,105 @@ export default function Assistant() {
             Model
             <select
               value={model}
+              disabled={models.length === 0 || busy || Boolean(credentialMutation)}
               onChange={(event) => setModel(event.target.value)}
-              className="mt-2 h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-cyan-400"
+              className="mt-2 h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {models.map((item) => <option key={item}>{item}</option>)}
             </select>
           </label>
           <button
             type="button"
-            onClick={() => void loadModels(provider)}
-            aria-label="Refresh provider models"
-            className="mt-5 inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-700 text-slate-400 hover:bg-slate-800 hover:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+            disabled={loading || busy || Boolean(credentialMutation)}
+            onClick={() => void refreshProviderControls(provider)}
+            aria-label="Refresh provider readiness and models"
+            className="mt-5 inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-700 text-slate-400 hover:bg-slate-800 hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <RefreshCw className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 px-4 py-3">
-          <span className={`rounded-full border px-2 py-1 text-[10px] font-medium ${
-            readiness?.ready
-              ? 'border-emerald-800 bg-emerald-950/40 text-emerald-300'
-              : 'border-amber-800 bg-amber-950/35 text-amber-300'
-          }`}>
-            {readiness?.ready ? 'Provider ready' : 'Provider needs attention'}
-          </span>
-          <span className="rounded-full border border-slate-700 px-2 py-1 text-[10px] text-slate-400">
-            {models.length} model{models.length === 1 ? '' : 's'}
-          </span>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-700 px-2 py-1 text-[10px] text-slate-400">
-            <KeyRound className="h-3 w-3" />
-            Credentials remain outside transcript storage
-          </span>
-          <label className="ml-auto flex cursor-pointer items-center gap-2 text-[10px] text-slate-500">
-            <input
-              type="checkbox"
-              checked={shareImages}
-              onChange={(event) => setShareImages(event.target.checked)}
-              className="h-3.5 w-3.5 accent-cyan-300"
-            />
-            Share images with provider on new conversations
-          </label>
+        <div className="border-b border-slate-800 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`rounded-full border px-2 py-1 text-[10px] font-medium ${
+              providerReady
+                ? 'border-emerald-800 bg-emerald-950/40 text-emerald-300'
+                : 'border-amber-800 bg-amber-950/35 text-amber-300'
+            }`}>
+              {providerReady ? 'Provider ready' : 'Provider needs attention'}
+            </span>
+            {providerReady ? (
+              <span className="rounded-full border border-slate-700 px-2 py-1 text-[10px] text-slate-400">
+                {models.length} model{models.length === 1 ? '' : 's'}
+              </span>
+            ) : (
+              <span className="rounded-full border border-slate-700 px-2 py-1 text-[10px] text-slate-400">
+                No verified models
+              </span>
+            )}
+            <label className="ml-auto flex cursor-pointer items-center gap-2 text-[10px] text-slate-500">
+              <input
+                type="checkbox"
+                checked={shareImages}
+                onChange={(event) => setShareImages(event.target.checked)}
+                className="h-3.5 w-3.5 accent-cyan-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+              />
+              Share images with provider on new conversations
+            </label>
+          </div>
+
+          <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+            <div className="min-w-0 text-xs leading-5 text-slate-400">
+              <p className="break-words text-slate-300">{safeReadinessDetail(readiness)}</p>
+              {recoveryText && <p className="mt-1 break-words text-amber-300">{recoveryText}</p>}
+              <p className="mt-2 inline-flex max-w-full items-start gap-1.5 break-words text-slate-500">
+                <KeyRound className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span className="min-w-0 break-words">
+                  {credentialStatusText} Source: {credentialSourceLabel(credential?.source)}.
+                </span>
+              </p>
+              <p className="mt-1 break-words text-slate-500">
+                The encrypted key is tied to the current Windows user and should be cleared before another person uses the same account.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 lg:justify-end">
+              <button
+                type="button"
+                disabled={Boolean(credentialMutation) || loading}
+                onClick={() => void mutateCredential('reimport')}
+                className="inline-flex h-9 items-center rounded-md border border-slate-700 px-3 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {credentialMutation === 'reimport' ? 'Re-importing local key' : 'Re-import local key'}
+              </button>
+              <button
+                type="button"
+                disabled={Boolean(credentialMutation) || loading || !credential?.saved}
+                onClick={() => void mutateCredential('clear')}
+                className="inline-flex h-9 items-center rounded-md border border-slate-700 px-3 text-xs font-medium text-slate-300 hover:border-rose-800 hover:text-rose-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {credentialMutation === 'clear' ? 'Clearing saved key' : 'Clear saved key'}
+              </button>
+            </div>
+          </div>
+          <div role="status" aria-live="polite" aria-atomic="true" className="min-h-5 pt-2 text-xs text-cyan-200">
+            {announcement}
+          </div>
         </div>
 
         <div className="flex items-center gap-2 border-b border-slate-800 px-4 py-3 text-xs text-slate-500">
           <ShieldCheck className="h-3.5 w-3.5 text-cyan-300" />
-          {conversation ? `Ready in ${conversation.title}` : 'Connecting to the local control service'}
+          {conversation && providerReady
+            ? `Ready in ${conversation.title}`
+            : conversation
+              ? 'Existing conversation preserved. Restore provider access to continue.'
+              : providerReady
+                ? 'Ready to create a conversation'
+                : 'Connecting to the local control service'}
         </div>
 
         {error && (
           <div role="alert" className="border-b border-rose-900 bg-rose-950/35 px-4 py-3 text-sm text-rose-200">
-            {error} Check provider readiness or start a new conversation after correcting the configuration.
+            {error}
           </div>
         )}
 
@@ -340,7 +556,7 @@ export default function Assistant() {
             </div>
             <Composer
               attachments={attachments}
-              disabled={!conversation || loading}
+              disabled={!conversation || loading || !providerReady || !model}
               onAttach={(files) => void attach(files)}
               onRemoveAttachment={(id) => setAttachments((items) => items.filter((item) => item.id !== id))}
               onSend={send}

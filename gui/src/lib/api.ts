@@ -148,11 +148,20 @@ export interface ControlStatus {
   error?: string;
 }
 
+export interface ProviderCredentialStatus {
+  configured: boolean;
+  saved: boolean;
+  source: string;
+}
+
 export interface ProviderReadiness {
   name: string;
   ready: boolean;
+  reachable: boolean;
+  authenticated: boolean;
+  model_count: number;
   detail?: string;
-  credential_configured?: boolean;
+  credential_configured: boolean;
 }
 
 export interface ConversationRecord {
@@ -264,6 +273,9 @@ interface Api {
   awbLaunch(): Promise<AwbLaunchResult>;
   loginUrl(siteKey: string): Promise<{ ok: boolean; url?: string; error?: string }>;
   controlStatus(): Promise<ControlStatus>;
+  providerCredentialStatus(): Promise<ProviderCredentialStatus>;
+  providerCredentialReimport(): Promise<ProviderCredentialStatus>;
+  providerCredentialClear(): Promise<ProviderCredentialStatus>;
   assistantProviders(): Promise<ProviderReadiness[]>;
   assistantModels(provider: string): Promise<string[]>;
   assistantConversations(): Promise<ConversationRecord[]>;
@@ -338,7 +350,17 @@ const DEMO_SERVICES: ServicesMap = {
 const DEMO_PROVIDER: ProviderReadiness = {
   name: 'FreeChain',
   ready: false,
+  reachable: false,
+  authenticated: false,
+  model_count: 0,
+  credential_configured: false,
   detail: 'Desktop control service is not connected.',
+};
+
+const DEMO_CREDENTIAL_STATUS: ProviderCredentialStatus = {
+  configured: false,
+  saved: false,
+  source: 'unavailable',
 };
 
 const DEMO_JOBS: JobRow[] = [
@@ -437,10 +459,22 @@ export const api: Api = {
     window.api
       ? window.api.controlStatus()
       : Promise.resolve({ ready: false, port: null, error: 'desktop-only feature' }),
+  providerCredentialStatus: () =>
+    window.api
+      ? window.api.providerCredentialStatus()
+      : Promise.resolve(DEMO_CREDENTIAL_STATUS),
+  providerCredentialReimport: () =>
+    window.api
+      ? window.api.providerCredentialReimport()
+      : Promise.resolve(DEMO_CREDENTIAL_STATUS),
+  providerCredentialClear: () =>
+    window.api
+      ? window.api.providerCredentialClear()
+      : Promise.resolve(DEMO_CREDENTIAL_STATUS),
   assistantProviders: () =>
     window.api ? window.api.assistantProviders() : Promise.resolve([DEMO_PROVIDER]),
   assistantModels: (provider) =>
-    window.api ? window.api.assistantModels(provider) : Promise.resolve(['auto']),
+    window.api ? window.api.assistantModels(provider) : Promise.resolve([]),
   assistantConversations: () =>
     window.api ? window.api.assistantConversations() : Promise.resolve([]),
   assistantCreate: (input) =>
