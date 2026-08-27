@@ -228,6 +228,7 @@ class OpenAICompatibleProvider:
         self.credential_env = credential_env
         self.transport = transport or _json_transport
         self.timeout_seconds = max(1.0, min(float(timeout_seconds), 120.0))
+        self._auto_fallback_model = ""
 
     def _headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
@@ -376,27 +377,34 @@ class OpenAICompatibleProvider:
         messages[-1] = current
         return messages
 
-    def complete(self, request: AssistantRequest) -> AssistantResponse:
-        if not self._credential_configured():
-            raise ProviderError("Provider credential is not configured.")
-        tools = [
-            {
-                "type": "function",
-                "function": {
-                    "name": item["name"],
-                    "description": item["description"],
-                    "parameters": item["input_schema"],
-                },
-            }
-            for item in request.tools
+    @staticmethod
+    def _auto_fallback_models(model_ids: Sequence[str]) -> list[str]:
+        """Return a short, deterministic set of concrete recovery models.
+
+        FreeChain advertises routing aliases alongside concrete models. When
+        the ``auto`` route is temporarily unavailable, retrying another alias
+        tends to hit the same failed upstream. Prefer small, commonly exposed
+        concrete models when present, then retain the provider's advertised
+        order. Preview and stealth routes are never selected automatically.
+        """
+        preferred = (
+            "gemini-3.5-flash",
+            "openai/gpt-oss-20b",
+            "llama-3.3-70b-versatile",
+        )
+        usable = [
+            model_id
+            for model_id in model_ids
+            if model_id != "auto"
+            and not model_id.casefold().startswith("auto/")
+            and "stealth" not in model_id.casefold()
+            and "preview" not in model_id.casefold()
         ]
-        body: dict[str, Any] = {
-            "model": request.model,
-            "messages": self._message_payload(request),
-        }
-        if tools:
-            body["tools"] = tools
-            body["tool_choice"] = "auto"
+        ordered = [model_id for model_id in preferred if model_id in usable]
+        ordered.extend(model_id for model_id in usable if model_id not in ordered)
+        return ordered[:4]
+
+    def _request_completion(self, body: Mapping[str, Any]) -> AssistantResponse:
         transport_failed = False
         try:
             payload = self.transport(
@@ -434,6 +442,67 @@ class OpenAICompatibleProvider:
         if not isinstance(content, str):
             raise ProviderError("Provider message content is invalid.")
         return AssistantResponse(content=content[:100_000], tool_calls=tuple(calls))
+
+    def complete(self, request: AssistantRequest) -> AssistantResponse:
+        if not self._credential_configured():
+            raise ProviderError("Provider credential is not configured.")
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": item["name"],
+                    "description": item["description"],
+                    "parameters": item["input_schema"],
+                },
+            }
+            for item in request.tools
+        ]
+        body: dict[str, Any] = {"messages": self._message_payload(request)}
+        if tools:
+            body["tools"] = tools
+            body["tool_choice"] = "auto"
+
+        attempted: set[str] = set()
+        initial_models = [request.model]
+        if request.model == "auto" and self._auto_fallback_model:
+            initial_models.insert(0, self._auto_fallback_model)
+        last_error = "Provider completion request failed."
+        for model_id in initial_models:
+            if model_id in attempted:
+                continue
+            attempted.add(model_id)
+            try:
+                response = self._request_completion({**body, "model": model_id})
+            except ProviderError as exc:
+                last_error = str(exc)
+                if model_id == self._auto_fallback_model:
+                    self._auto_fallback_model = ""
+                continue
+            if request.model == "auto" and model_id != "auto":
+                self._auto_fallback_model = model_id
+            return response
+
+        if request.model != "auto":
+            raise ProviderError(last_error)
+
+        model_probe_failed = False
+        try:
+            model_ids = self.models()
+        except ProviderError:
+            model_probe_failed = True
+            model_ids = []
+        if not model_probe_failed:
+            for model_id in self._auto_fallback_models(model_ids):
+                if model_id in attempted:
+                    continue
+                attempted.add(model_id)
+                try:
+                    response = self._request_completion({**body, "model": model_id})
+                except ProviderError:
+                    continue
+                self._auto_fallback_model = model_id
+                return response
+        raise ProviderError("Provider completion request failed.")
 
 
 class ConversationService:

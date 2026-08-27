@@ -332,6 +332,54 @@ class AssistantTests(unittest.TestCase):
         self.assertNotIn(credential, str(raised.exception))
         self.assertEqual(seen_methods, ["POST"])
 
+    def test_openai_provider_auto_recovers_with_an_advertised_concrete_model(self) -> None:
+        credential_env = "TEST_FREECHAIN_ACCESS_KEY"
+        credential = "synthetic-provider-key"
+        seen_requests: list[tuple[str, str]] = []
+
+        def transport(method, url, _headers, body, _timeout):
+            model = str((body or {}).get("model", ""))
+            seen_requests.append((method, model))
+            if method == "GET":
+                return {
+                    "data": [
+                        {"id": "auto"},
+                        {"id": "stealth/preview"},
+                        {"id": "gemini-3.5-flash"},
+                    ]
+                }
+            if model == "auto":
+                raise ProviderError(f"temporary upstream overload echoed {credential}")
+            return {"choices": [{"message": {"content": "recovered", "tool_calls": []}}]}
+
+        provider = OpenAICompatibleProvider(
+            "FreeChain",
+            "http://127.0.0.1:4853/v1",
+            credential_env=credential_env,
+            transport=transport,
+        )
+        request = AssistantRequest(
+            model="auto",
+            messages=({"role": "user", "content": "hello"},),
+            tools=(),
+        )
+        with patch.dict(os.environ, {credential_env: credential}, clear=False):
+            response = provider.complete(request)
+            cached_response = provider.complete(request)
+
+        self.assertEqual(response.content, "recovered")
+        self.assertEqual(cached_response.content, "recovered")
+        self.assertEqual(
+            seen_requests,
+            [
+                ("POST", "auto"),
+                ("GET", ""),
+                ("POST", "gemini-3.5-flash"),
+                ("POST", "gemini-3.5-flash"),
+            ],
+        )
+        self.assertNotIn(credential, str(response))
+
     def test_openai_provider_completion_does_not_probe_models(self) -> None:
         credential_env = "TEST_FREECHAIN_ACCESS_KEY"
         seen_requests: list[str] = []
