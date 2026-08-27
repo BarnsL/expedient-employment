@@ -29,6 +29,10 @@ One-time prerequisite: **Inno Setup 6** from <https://jrsoftware.org/isinfo.php>
 powershell -NoProfile -ExecutionPolicy Bypass -File .\packaging\build-windows.ps1
 ```
 
+After a successful dependency install and GUI build, packaging-only retries can
+use `-SkipOnlyCliInstall -SkipGuiBuild`. The script refuses the GUI skip when
+the production entry file is missing.
+
 The script will:
 
 1. Run `npm run build` in `gui/` (installing GUI dependencies first if needed).

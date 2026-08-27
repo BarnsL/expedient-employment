@@ -13,7 +13,9 @@
     Nothing is installed globally; electron-builder runs through npx.
 #>
 param(
-    [string]$Version
+    [string]$Version,
+    [switch]$SkipOnlyCliInstall,
+    [switch]$SkipGuiBuild
 )
 
 $ErrorActionPreference = 'Stop'
@@ -51,12 +53,18 @@ try {
         & npm install
         if ($LASTEXITCODE -ne 0) { throw 'npm install failed in gui/.' }
     }
-    Write-Host 'Installing pinned only-cli runtime without optional fingerprint transport...'
-    & npm run only-cli:install
-    if ($LASTEXITCODE -ne 0) { throw 'only-cli runtime install failed.' }
-    Write-Host 'Building the GUI (npm run build)...'
-    & npm run build
-    if ($LASTEXITCODE -ne 0) { throw 'GUI build failed.' }
+    if (-not $SkipOnlyCliInstall) {
+        Write-Host 'Installing pinned only-cli runtime without optional fingerprint transport...'
+        & npm run only-cli:install
+        if ($LASTEXITCODE -ne 0) { throw 'only-cli runtime install failed.' }
+    }
+    if (-not $SkipGuiBuild) {
+        Write-Host 'Building the GUI (npm run build)...'
+        & npm run build
+        if ($LASTEXITCODE -ne 0) { throw 'GUI build failed.' }
+    } elseif (-not (Test-Path -LiteralPath (Join-Path $GuiDir 'dist\index.html'))) {
+        throw 'SkipGuiBuild was requested but gui/dist/index.html is missing.'
+    }
 
     # --- 2. electron-builder: unpacked dir + portable zip ---------------------
     Write-Host 'Running electron-builder (--win dir zip)...'
