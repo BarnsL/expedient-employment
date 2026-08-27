@@ -51,7 +51,7 @@ if (-not $pythonCommand) {
 }
 
 $arguments = @(
-    '-m', 'job_pipeline.scheduler_cli',
+    '-B', '-m', 'job_pipeline.scheduler_cli',
     'run-due',
     '--project-root', ('"{0}"' -f $resolvedProject),
     '--data-root', ('"{0}"' -f $resolvedData),
