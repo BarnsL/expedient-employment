@@ -202,6 +202,44 @@ class AssistantTests(unittest.TestCase):
         self.assertNotIn("fixture-key", str(response))
         self.assertEqual(seen[-1]["headers"]["Authorization"], "Bearer fixture-key")
 
+    def test_provider_echoed_credential_never_reaches_the_transcript_database(self) -> None:
+        credential_env = "TEST_TRANSCRIPT_PROVIDER_KEY"
+        credential = "synthetic-provider-key-for-redaction"
+
+        def transport(_method, _url, _headers, _body, _timeout):
+            return {
+                "choices": [{"message": {
+                    "content": f"provider echoed {credential}",
+                    "tool_calls": [],
+                }}]
+            }
+
+        provider = OpenAICompatibleProvider(
+            "local-provider",
+            "http://127.0.0.1:9000/v1",
+            credential_env=credential_env,
+            transport=transport,
+        )
+        database_path = self.root / "credential-redaction.sqlite3"
+        service = ConversationService(
+            database_path,
+            self.root / "credential-redaction-attachments",
+            providers={"local-provider": provider},
+            broker=ToolBroker(),
+        )
+        try:
+            conversation = service.create_conversation("local-provider", "model-a")
+            service.enqueue(conversation.id, "hello")
+            with patch.dict(os.environ, {credential_env: credential}, clear=False):
+                service.run_next(conversation.id)
+
+            assistant_message = service.messages(conversation.id)[-1]
+            self.assertNotIn(credential, assistant_message.content)
+            self.assertIn("[REDACTED]", assistant_message.content)
+        finally:
+            service.close()
+        self.assertNotIn(credential.encode("utf-8"), database_path.read_bytes())
+
     def test_openai_provider_readiness_requires_an_authenticated_model_list(self) -> None:
         credential_env = "TEST_FREECHAIN_ACCESS_KEY"
         credential = "synthetic-provider-key"

@@ -15,6 +15,12 @@ from .util import redact_secrets
 
 
 Runner = Callable[..., subprocess.CompletedProcess[str]]
+PROVIDER_ENV_NAME = re.compile(r"^[A-Z][A-Z0-9_]{0,71}$")
+CONTROL_PROVIDER_ENV_KEYS = {
+    "EXPEDIENT_PROVIDER_URL",
+    "EXPEDIENT_PROVIDER_KEY_ENV",
+    "FREECHAIN_ACCESS_KEY",
+}
 
 
 @dataclass(frozen=True)
@@ -51,15 +57,25 @@ class JobPipelineToolAdapter:
 
     def _run(self, command: list[str], *, timeout_seconds: float) -> PipelineCommandResult:
         arguments = [self.python_binary, "-m", "job_pipeline", *command]
+        child_environment = dict(os.environ)
+        credential_env = child_environment.get("EXPEDIENT_PROVIDER_KEY_ENV", "").strip().upper()
+        blocked = set(CONTROL_PROVIDER_ENV_KEYS)
+        if PROVIDER_ENV_NAME.fullmatch(credential_env):
+            blocked.add(credential_env)
+        child_environment = {
+            key: value
+            for key, value in child_environment.items()
+            if key.upper() not in blocked
+        }
+        child_environment.update({
+            "PYTHONPATH": str(self.project_root),
+            "PYTHONUNBUFFERED": "1",
+        })
         try:
             completed = self.runner(
                 arguments,
                 cwd=str(self.project_root),
-                env={
-                    **os.environ,
-                    "PYTHONPATH": str(self.project_root),
-                    "PYTHONUNBUFFERED": "1",
-                },
+                env=child_environment,
                 shell=False,
                 capture_output=True,
                 text=True,

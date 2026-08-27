@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from job_pipeline.app_tools import JobPipelineToolAdapter
@@ -67,6 +68,28 @@ class AppToolTests(unittest.TestCase):
                 {"job_id": "../bad", "resume_path": "bad.txt", "application_profile_path": "bad"},
                 context,
             )
+
+    def test_pipeline_subprocess_does_not_inherit_the_provider_credential(self) -> None:
+        calls = []
+
+        def runner(arguments, **options):
+            calls.append((arguments, options))
+            return subprocess.CompletedProcess(arguments, 0, "completed", "")
+
+        adapter = JobPipelineToolAdapter(Path.cwd(), runner=runner)
+        with patch.dict(
+            "os.environ",
+            {
+                "EXPEDIENT_PROVIDER_KEY_ENV": "FREECHAIN_ACCESS_KEY",
+                "FREECHAIN_ACCESS_KEY": "synthetic-provider-key",
+            },
+            clear=False,
+        ):
+            adapter._run(["run", "--max-jobs", "1"], timeout_seconds=1)
+
+        child_environment = calls[0][1]["env"]
+        self.assertNotIn("EXPEDIENT_PROVIDER_KEY_ENV", child_environment)
+        self.assertNotIn("FREECHAIN_ACCESS_KEY", child_environment)
 
 
 if __name__ == "__main__":

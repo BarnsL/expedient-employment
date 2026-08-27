@@ -189,12 +189,10 @@ class ProviderCredentialStore {
 
   importFromEnvironment() {
     if (!this.encryptionAvailable()) {
-      this.setUnavailable();
       return this.status();
     }
     const candidate = this.importCandidate();
     if (!candidate) {
-      this.setUnavailable();
       return this.status();
     }
     return this.persist(candidate.credential, candidate.source);

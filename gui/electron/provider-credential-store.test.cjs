@@ -117,3 +117,23 @@ test('clear preserves truthful state when encrypted record deletion fails', () =
     fs.rmSync(userDataPath, { recursive: true, force: true });
   }
 });
+
+test('failed re-import keeps the existing encrypted credential visible and clearable', () => {
+  const userDataPath = fs.mkdtempSync(path.join(os.tmpdir(), 'expedient-provider-reimport-failure-'));
+  const environment = { FREECHAIN_ACCESS_KEY: 'synthetic-provider-key' };
+  const safeStorage = fakeSafeStorage();
+  const store = new ProviderCredentialStore({ userDataPath, safeStorage, environment });
+
+  try {
+    store.importFromEnvironment();
+    delete environment.FREECHAIN_ACCESS_KEY;
+
+    assert.deepEqual(store.reimportFromEnvironment(), { available: true, source: 'environment' });
+    assert.equal(store.saved(), true);
+    assert.equal(store.credential(), 'synthetic-provider-key');
+    assert.equal(store.clear(), true);
+    assert.equal(store.saved(), false);
+  } finally {
+    fs.rmSync(userDataPath, { recursive: true, force: true });
+  }
+});

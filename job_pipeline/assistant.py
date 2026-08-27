@@ -233,13 +233,27 @@ class OpenAICompatibleProvider:
     def _headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
         if self.credential_env:
-            credential = os.environ.get(self.credential_env, "")
+            credential = self._credential()
             if credential:
                 headers["Authorization"] = f"Bearer {credential}"
         return headers
 
+    def _credential(self) -> str:
+        return os.environ.get(self.credential_env, "").strip() if self.credential_env else ""
+
+    def _redact_provider_value(self, value: Any) -> Any:
+        """Remove the active credential from untrusted provider output."""
+        credential = self._credential()
+        if isinstance(value, str):
+            return value.replace(credential, "[REDACTED]") if credential else value
+        if isinstance(value, list):
+            return [self._redact_provider_value(item) for item in value]
+        if isinstance(value, dict):
+            return {key: self._redact_provider_value(item) for key, item in value.items()}
+        return value
+
     def _credential_configured(self) -> bool:
-        return not self.credential_env or bool(os.environ.get(self.credential_env, "").strip())
+        return not self.credential_env or bool(self._credential())
 
     @staticmethod
     def _model_ids(payload: Mapping[str, Any]) -> list[str]:
@@ -432,6 +446,7 @@ class OpenAICompatibleProvider:
                 arguments = json.loads(function.get("arguments") or "{}")
                 if not isinstance(arguments, dict):
                     raise ValueError
+                arguments = self._redact_provider_value(arguments)
             except (KeyError, TypeError, ValueError, json.JSONDecodeError):
                 pass
             else:
@@ -441,6 +456,7 @@ class OpenAICompatibleProvider:
         content = message.get("content") or ""
         if not isinstance(content, str):
             raise ProviderError("Provider message content is invalid.")
+        content = self._redact_provider_value(content)
         return AssistantResponse(content=content[:100_000], tool_calls=tuple(calls))
 
     def complete(self, request: AssistantRequest) -> AssistantResponse:

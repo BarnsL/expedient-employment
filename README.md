@@ -38,7 +38,7 @@ See [docs/SECURITY.md](docs/SECURITY.md) for the threat model and [docs/AUTOMATI
 Release output contains:
 
 - `ExpedientEmployment-Setup-2.0.0.exe`, a per-user installer.
-- `Expedient Employment-2.0.0-win.zip`, a portable archive.
+- `ExpedientEmployment-portable-2.0.0.zip`, a portable archive.
 
 The installer places the application under the current user's local programs directory and creates a Start Menu shortcut. It does not require administrator rights.
 
