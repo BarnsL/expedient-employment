@@ -56,9 +56,12 @@ export default function Dashboard() {
   );
 
   useEffect(() => {
-    runDoctor();
-    refreshServices();
-    api.sessionsRead().then(setSessions);
+    const timer = window.setTimeout(() => {
+      void runDoctor();
+      void refreshServices();
+      void api.sessionsRead().then(setSessions);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [runDoctor, refreshServices]);
 
   const webclaw = doctor ? serviceFromDoctor(doctor.output, 'webclaw') : null;

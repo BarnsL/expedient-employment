@@ -37,7 +37,8 @@ export default function ServiceEmbed({
   }, [serviceKey]);
 
   useEffect(() => {
-    check();
+    const timer = window.setTimeout(() => { void check(); }, 0);
+    return () => window.clearTimeout(timer);
   }, [check]);
 
   const start = async () => {

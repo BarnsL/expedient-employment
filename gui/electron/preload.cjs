@@ -49,6 +49,7 @@ contextBridge.exposeInMainWorld('api', {
   assistantClear: (conversationId) => ipcRenderer.invoke('assistant:clear', conversationId),
   toolsList: () => ipcRenderer.invoke('tools:list'),
   workflowsDryRun: (input) => ipcRenderer.invoke('workflows:dry-run', input),
+  workflowsRun: (input) => ipcRenderer.invoke('workflows:run', input),
   schedulesList: () => ipcRenderer.invoke('schedules:list'),
   schedulesCreate: (input) => ipcRenderer.invoke('schedules:create', input),
   schedulesToggle: (scheduleId, enabled) => (
@@ -56,4 +57,5 @@ contextBridge.exposeInMainWorld('api', {
   ),
   schedulesRunDue: () => ipcRenderer.invoke('schedules:run-due'),
   schedulesHistory: (scheduleId) => ipcRenderer.invoke('schedules:history', scheduleId),
+  schedulesInstallWake: () => ipcRenderer.invoke('schedules:install-wake'),
 });

@@ -292,6 +292,7 @@ interface Api {
   assistantClear(conversationId: string): Promise<{ cleared: boolean }>;
   toolsList(): Promise<ToolContract[]>;
   workflowsDryRun(input: WorkflowInput): Promise<Record<string, unknown>>;
+  workflowsRun(input: WorkflowInput): Promise<Record<string, unknown>>;
   schedulesList(): Promise<ScheduleRecord[]>;
   schedulesCreate(input: {
     name: string;
@@ -302,6 +303,7 @@ interface Api {
   schedulesToggle(scheduleId: number, enabled: boolean): Promise<ScheduleRecord>;
   schedulesRunDue(): Promise<Record<string, unknown>[]>;
   schedulesHistory(scheduleId: number): Promise<Record<string, unknown>[]>;
+  schedulesInstallWake(): Promise<{ code: number | null; output: string }>;
 }
 
 declare global {
@@ -506,6 +508,10 @@ export const api: Api = {
     window.api
       ? window.api.workflowsDryRun(input)
       : Promise.resolve({ status: 'dry_run', input }),
+  workflowsRun: (input) =>
+    window.api
+      ? window.api.workflowsRun(input)
+      : Promise.resolve({ status: 'succeeded', input }),
   schedulesList: () => window.api ? window.api.schedulesList() : Promise.resolve([]),
   schedulesCreate: (input) =>
     window.api
@@ -518,4 +524,8 @@ export const api: Api = {
   schedulesRunDue: () => window.api ? window.api.schedulesRunDue() : Promise.resolve([]),
   schedulesHistory: (scheduleId) =>
     window.api ? window.api.schedulesHistory(scheduleId) : Promise.resolve([]),
+  schedulesInstallWake: () =>
+    window.api
+      ? window.api.schedulesInstallWake()
+      : Promise.resolve({ code: -1, output: 'Background wake requires the desktop app.' }),
 };

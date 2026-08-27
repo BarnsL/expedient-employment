@@ -630,6 +630,9 @@ ipcMain.handle('tools:list', () => controlRequest('GET', '/v1/tools'));
 ipcMain.handle('workflows:dry-run', (_event, payload) => (
   controlRequest('POST', '/v1/workflows/dry-run', payload || {})
 ));
+ipcMain.handle('workflows:run', (_event, payload) => (
+  controlRequest('POST', '/v1/workflows/run', payload || {})
+));
 ipcMain.handle('schedules:list', () => controlRequest('GET', '/v1/schedules'));
 ipcMain.handle('schedules:create', (_event, payload) => (
   controlRequest('POST', '/v1/schedules', payload || {})
@@ -644,4 +647,12 @@ ipcMain.handle('schedules:toggle', (_event, scheduleId, enabled) => (
 ipcMain.handle('schedules:run-due', () => controlRequest('POST', '/v1/schedules/run-due', {}));
 ipcMain.handle('schedules:history', (_event, scheduleId) => (
   controlRequest('GET', `/v1/schedules/${controlScheduleId(scheduleId)}/history`)
+));
+ipcMain.handle('schedules:install-wake', () => (
+  runPowerShell([
+    '-File', path.join(PIPELINE_ROOT, 'scripts', 'install-scheduler.ps1'),
+    '-Action', 'Install',
+    '-ProjectRoot', PIPELINE_ROOT,
+    '-DataRoot', path.join(app.getPath('userData'), 'control'),
+  ])
 ));
