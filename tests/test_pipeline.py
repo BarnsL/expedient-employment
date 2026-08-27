@@ -186,10 +186,13 @@ class PipelineTests(unittest.TestCase):
 
     def test_three_specialist_contracts_stop_at_review(self) -> None:
         """Exercise A/B/C offline and ensure Agent C cannot claim external submission."""
+        now = datetime(2026, 8, 1, tzinfo=timezone.utc)
         job = job_from_fixture(self.fixtures[0])
         match = score_job(job, self.profile)
-        finding = RecruiterAgent().inspect(job, fresh_days=30)
-        analysis = MatchAnalystAgent().analyze(job, match, finding, threshold=72, fresh_days=30)
+        finding = RecruiterAgent().inspect(job, fresh_days=30, now=now)
+        analysis = MatchAnalystAgent().analyze(
+            job, match, finding, threshold=72, fresh_days=30, now=now
+        )
         self.assertTrue(finding.active)
         self.assertEqual(analysis.recommendation, "apply")
         application_profile = {
@@ -615,9 +618,10 @@ class PipelineTests(unittest.TestCase):
 
     def test_low_resume_matcher_preview_routes_agent_b_to_review(self) -> None:
         """Use weak external ATS evidence as a review gate, never as a silent rejection."""
+        now = datetime(2026, 8, 1, tzinfo=timezone.utc)
         job = job_from_fixture(self.fixtures[0])
         match = score_job(job, self.profile)
-        finding = RecruiterAgent().inspect(job, fresh_days=30)
+        finding = RecruiterAgent().inspect(job, fresh_days=30, now=now)
         analysis = MatchAnalystAgent().analyze(
             job,
             match,
@@ -625,12 +629,14 @@ class PipelineTests(unittest.TestCase):
             threshold=72,
             fresh_days=30,
             resume_matcher={"overall_score": 45, "missing_keywords": ["Workday"]},
+            now=now,
         )
         self.assertEqual(analysis.recommendation, "review")
         self.assertIn("Resume-Matcher missing keyword: Workday", analysis.gaps)
 
     def test_resume_matcher_outage_preserves_agent_b_review(self) -> None:
         """Do not let optional ATS-service downtime erase deterministic decisions."""
+        now = datetime(2026, 8, 1, tzinfo=timezone.utc)
         job = job_from_fixture(self.fixtures[0])
         with tempfile.TemporaryDirectory() as temp:
             temp_path = Path(temp)
@@ -655,6 +661,7 @@ class PipelineTests(unittest.TestCase):
                 allow_resume_upload=True,
                 resume_matcher_url="http://127.0.0.1:3000/api/v1",
                 output=output,
+                now=now,
             )
             with patch("job_pipeline.cli.ResumeMatcherClient", return_value=DownMatcher()):
                 self.assertEqual(command_agent_b(args, ROOT), 0)

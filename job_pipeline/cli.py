@@ -719,7 +719,12 @@ def command_agent_b(args: argparse.Namespace, root: Path) -> int:
             match = store.match(job.id)
             if not match:
                 continue
-            finding = RecruiterAgent().inspect(job, fresh_days=args.fresh_days)
+            # Tests and scheduled replays may supply a captured clock so a run
+            # remains reproducible after its job fixtures age.
+            run_now = getattr(args, "now", None)
+            finding = RecruiterAgent().inspect(
+                job, fresh_days=args.fresh_days, now=run_now
+            )
             analysis = MatchAnalystAgent().analyze(
                 job,
                 match,
@@ -728,6 +733,7 @@ def command_agent_b(args: argparse.Namespace, root: Path) -> int:
                 fresh_days=args.fresh_days,
                 client=client,
                 resume_matcher=external_assessments.get(job.id),
+                now=run_now,
             )
             records.append({
                 "job_id": job.id,
