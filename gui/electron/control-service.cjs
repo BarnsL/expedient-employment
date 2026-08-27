@@ -95,6 +95,7 @@ class ControlServiceManager {
       const env = {
         ...process.env,
         PYTHONPATH: pythonPath,
+        PYTHONDONTWRITEBYTECODE: '1',
         EXPEDIENT_CONTROL_TOKEN: token,
         EXPEDIENT_DATA_DIR: dataRoot,
         ONLY_CLI_NODE: nodeExecutable,

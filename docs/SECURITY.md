@@ -75,6 +75,8 @@ Repository-history sanitation is a separate operation from source and package sa
 
 Original application source is MIT. Integrated source revisions are recorded in `docs/PROVENANCE.md`. Third-party dependencies retain their own licenses and are listed in `THIRD_PARTY_NOTICES.md`.
 
+Packaged Python runs with bytecode writes disabled so installed resource directories do not accumulate host-path cache files.
+
 Restricted-license product source is not copied into the application. Comparable capabilities are original implementations based only on public product requirements.
 
 ## Reporting a vulnerability
