@@ -71,8 +71,13 @@ test('manager passes the supplied provider environment only to its owned child',
   const parentProviderEnv = Object.fromEntries(
     Object.keys(providerEnv).map((name) => [name, process.env[name]]),
   );
+  const providerKey = providerEnv.TEST_FREECHAIN_ACCESS_KEY;
   const manager = new ControlServiceManager({
     spawnImpl: (_command, _args, options) => {
+      assert.deepEqual(
+        Object.fromEntries(Object.keys(providerEnv).map((name) => [name, process.env[name]])),
+        parentProviderEnv,
+      );
       captured = options;
       process.nextTick(() => {
         child.stdout.write('{"event":"expedient_control_ready","host":"127.0.0.1","port":32124}\n');
@@ -97,9 +102,9 @@ test('manager passes the supplied provider environment only to its owned child',
     Object.fromEntries(Object.keys(providerEnv).map((name) => [name, process.env[name]])),
     parentProviderEnv,
   );
-  assert.equal(JSON.stringify(status).includes(providerEnv.FREECHAIN_ACCESS_KEY), false);
+  assert.equal(JSON.stringify(status).includes(providerKey), false);
   assert.equal(JSON.stringify(status).includes(providerEnv.EXPEDIENT_PROVIDER_URL), false);
-  assert.equal(JSON.stringify(manager.status()).includes(providerEnv.FREECHAIN_ACCESS_KEY), false);
+  assert.equal(JSON.stringify(manager.status()).includes(providerKey), false);
   assert.equal(JSON.stringify(manager.status()).includes(providerEnv.EXPEDIENT_PROVIDER_URL), false);
   manager.stop();
 });
