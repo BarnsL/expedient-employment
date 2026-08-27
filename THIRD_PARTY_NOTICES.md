@@ -1,5 +1,13 @@
 # Third-party notice
 
+The integrated application lifecycle and discovery improvements include MIT
+licensed source from AI Job Search Pipeline at reviewed revision
+`3962e0a0ecbaad4c6ab618b0113be1a2611073f4`:
+
+- Project: https://github.com/adeluna1/ai-job-search-pipeline
+- License: MIT
+- Detailed file ledger: `docs/PROVENANCE.md`
+
 This project integrates with, but does not vendor or modify, WebClaw:
 
 - Project: https://github.com/0xMassi/webclaw

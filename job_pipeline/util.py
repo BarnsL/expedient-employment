@@ -35,6 +35,22 @@ def write_json(path: Path, value: Any) -> None:
         handle.write("\n")
 
 
+def write_json_atomic(path: Path, value: Any) -> None:
+    """Atomically replace a JSON file so interrupted checkpoints stay readable."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        with temporary.open("w", encoding="utf-8", newline="\n") as handle:
+            json.dump(value, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
+
 def load_dotenv(path: Path) -> None:
     """Load simple KEY=VALUE entries without replacing existing environment values."""
     if not path.exists():
@@ -89,8 +105,19 @@ def canonical_url(url: str) -> str:
         query = reparsed.query
     else:
         path, query = parts.path, parts.query
+    query_items = parse_qsl(query, keep_blank_values=True)
+    host = netloc.casefold().split(":", 1)[0]
+    if host == "hrmdirect.com" or host.endswith(".hrmdirect.com"):
+        requisition_items = [
+            (key, value)
+            for identifier in ("req", "id")
+            for key, value in query_items
+            if key.casefold() == identifier and value
+        ]
+        if requisition_items:
+            query_items = requisition_items[:1]
     kept = []
-    for key, value in parse_qsl(query, keep_blank_values=True):
+    for key, value in query_items:
         if not any(key.casefold().startswith(prefix) for prefix in TRACKING_QUERY_PREFIXES):
             kept.append((key, value))
     clean_path = re.sub(r"/{2,}", "/", path or "/")

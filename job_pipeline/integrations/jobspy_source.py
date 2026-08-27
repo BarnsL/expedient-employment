@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import math
 import logging
+import queue
 import re
+import threading
 from datetime import date, datetime
 from typing import Any, Callable, Protocol
 
@@ -47,31 +49,21 @@ def _board_logger_name(site: str) -> str:
 
 def _http_block_status(
     messages: list[str],
-    detect_status: list[int] | None = None,
-    human_check_markers: list[str] | None = None,
+    detect_status: list[int],
+    human_check_markers: list[str],
 ) -> str | None:
-    """Classify access-control responses found in captured board logs.
-
-    Returns ``blocked_human_check`` when a human-verification marker appears,
-    or ``blocked_<status>`` for a configured non-retryable HTTP status (default
-    400/401/403/429). Detection only — blocked boards are routed to the user's
-    session browser, never bypassed.
-    """
+    """Classify a configured HTTP block or human-verification interstitial."""
     text = " ".join(messages)
     lowered = text.casefold()
-    markers = human_check_markers if human_check_markers is not None else [
-        "captcha",
-        "are you a robot",
-        "unusual traffic",
-        "verify you are human",
-        "security check",
-    ]
-    if any(marker.casefold() in lowered for marker in markers):
+    if any(marker.casefold() in lowered for marker in human_check_markers):
         return "blocked_human_check"
-    statuses = detect_status if detect_status is not None else [400, 401, 403, 429]
-    codes = "|".join(str(code) for code in statuses)
+    codes = "|".join(re.escape(str(code)) for code in detect_status)
+    if not codes:
+        return None
     match = re.search(
-        rf"(?:status\s+code|response|http)\D{{0,12}}({codes})\b", text, re.IGNORECASE
+        rf"(?:status\s+code|response|http)\D{{0,12}}({codes})\b",
+        text,
+        re.IGNORECASE,
     )
     return f"blocked_{match.group(1)}" if match else None
 
@@ -219,13 +211,48 @@ class JobSpySource:
     name = "jobspy"
     supported_sites = ("linkedin", "indeed", "glassdoor", "zip_recruiter", "google")
 
-    def __init__(self, scraper: Callable[..., Any] | None = None):
+    def __init__(
+        self,
+        scraper: Callable[..., Any] | None = None,
+        *,
+        board_timeout_seconds: float = 45,
+    ):
         self._scraper = scraper
+        self.board_timeout_seconds = max(0.1, float(board_timeout_seconds))
         self.last_diagnostics: dict[str, Any] = {}
         policy = load_policy()
         self._guard_statuses, self._guard_markers, self._guard_action = (
             access_guard_config(policy)
         )
+
+    def _scrape_with_timeout(
+        self, scraper: Callable[..., Any], options: dict[str, Any]
+    ) -> Any:
+        """Run one provider call in a daemon thread with a hard wall-clock limit."""
+        outcome: queue.Queue[tuple[str, Any]] = queue.Queue(maxsize=1)
+
+        def invoke() -> None:
+            try:
+                outcome.put(("result", scraper(**options)))
+            except BaseException as exc:
+                outcome.put(("error", exc))
+
+        worker = threading.Thread(
+            target=invoke,
+            name=f"jobspy-{options['site_name'][0]}",
+            daemon=True,
+        )
+        worker.start()
+        try:
+            kind, value = outcome.get(timeout=self.board_timeout_seconds)
+        except queue.Empty as exc:
+            site = options["site_name"][0]
+            raise TimeoutError(
+                f"{site} exceeded the {self.board_timeout_seconds:g}s board timeout"
+            ) from exc
+        if kind == "error":
+            raise value
+        return value
 
     def _load_scraper(self) -> Callable[..., Any]:
         """Import JobSpy lazily so the base CLI remains dependency-free."""
@@ -290,7 +317,11 @@ class JobSpySource:
             board_logger = logging.getLogger(_board_logger_name(call_site))
             board_logger.addHandler(capture)
             try:
-                result = scraper(**scraper_options)
+                result = self._scrape_with_timeout(scraper, scraper_options)
+            except TimeoutError as exc:
+                provider_errors.append(f"{call_site}: {exc}")
+                board_status[call_site] = "timed_out"
+                continue
             except Exception as exc:  # third-party providers expose heterogeneous errors
                 provider_errors.append(f"{call_site}: {exc}")
                 board_status[call_site] = "error"
@@ -311,8 +342,8 @@ class JobSpySource:
             rows.extend(call_rows)
             blocked_status = _http_block_status(
                 capture.messages,
-                detect_status=self._guard_statuses,
-                human_check_markers=self._guard_markers,
+                self._guard_statuses,
+                self._guard_markers,
             )
             if blocked_status:
                 board_status[call_site] = blocked_status
@@ -342,7 +373,9 @@ class JobSpySource:
             elif site not in board_status:
                 board_status[site] = "error"
         blocked_sites = [
-            site for site, status in board_status.items() if status.startswith("blocked_")
+            site
+            for site, status in board_status.items()
+            if status.startswith("blocked_") or status == "timed_out"
         ]
         self.last_diagnostics = {
             "provider": self.name,
@@ -388,11 +421,10 @@ class JobSpySource:
             "fallback_sites": sites_without_results,
             "fallback_recommended": bool(sites_without_results),
             "note": (
-                "Every board is called once. An access-control response (HTTP "
-                "400/401/403/429 or a human-verification marker) opens that board's "
-                "circuit breaker for the current run and routes it to the user's "
-                "session browser. Empty, blocked, and errored boards "
-                "are eligible for WebClaw fallback."
+                "Every board call has a hard wall-clock timeout. Configured access-control "
+                "responses and human-verification markers open that board's circuit breaker "
+                "for the current run and route it to the user's session browser. Empty, "
+                "blocked, timed-out, and errored boards are eligible for fallback."
             ),
         }
         return jobs

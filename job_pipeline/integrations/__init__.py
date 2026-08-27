@@ -6,7 +6,6 @@ third-party package or locally running service.
 
 from .browser_use_runner import BrowserUseError, BrowserUseRunner
 from .agent_web_browser import (
-    BOARD_PLATFORMS,
     AgentWebBrowserClient,
     AgentWebBrowserError,
     AgentWebBrowserPage,
@@ -19,7 +18,6 @@ __all__ = [
     "AgentWebBrowserClient",
     "AgentWebBrowserError",
     "AgentWebBrowserPage",
-    "BOARD_PLATFORMS",
     "BrowserUseError",
     "BrowserUseRunner",
     "DiscoveryError",
