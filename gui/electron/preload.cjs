@@ -13,6 +13,15 @@ contextBridge.exposeInMainWorld('api', {
   },
   jobsRead: () => ipcRenderer.invoke('jobs:read'),
   reportOpen: () => ipcRenderer.invoke('report:open'),
+  applicationsRead: () => ipcRenderer.invoke('applications:read'),
+  applicationsRefresh: () => ipcRenderer.invoke('applications:refresh'),
+  applicationsFlag: (identityKey, flag) => (
+    ipcRenderer.invoke('applications:flag', { identityKey, flag })
+  ),
+  applicationsUndo: (identityKey) => (
+    ipcRenderer.invoke('applications:undo', { identityKey })
+  ),
+  applicationsReportOpen: () => ipcRenderer.invoke('applications:report-open'),
   agentsList: () => ipcRenderer.invoke('agents:list'),
   configRead: (name) => ipcRenderer.invoke('config:read', name),
   configWrite: (name, text) => ipcRenderer.invoke('config:write', name, text),

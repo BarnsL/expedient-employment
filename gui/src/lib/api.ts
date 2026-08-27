@@ -47,6 +47,45 @@ export interface JobsResult {
   error?: string;
 }
 
+export type ApplicationOutcomeFlag = 'interview' | 'denied' | 'not_selected';
+
+export interface ApplicationRecord {
+  identity_key: string;
+  job_id: string;
+  company: string;
+  title: string;
+  status: string;
+  status_label: string;
+  status_inferred: boolean;
+  outcome_flag: ApplicationOutcomeFlag | '';
+  outcome_label: string;
+  applied_at: string;
+  updated_at: string;
+  location: string;
+  source: string;
+  fit_score: number | '';
+  notes: string;
+  url: string;
+}
+
+export interface ApplicationSummary {
+  total: number;
+  active: number;
+  interviewing: number;
+  offers: number;
+  closed: number;
+  status_not_recorded: number;
+  companies: number;
+  status_counts: Record<string, number>;
+}
+
+export interface ApplicationDashboardResult {
+  exists: boolean;
+  summary: Partial<ApplicationSummary>;
+  applications: ApplicationRecord[];
+  error?: string | null;
+}
+
 export interface AgentInfo {
   id?: string;
   name?: string;
@@ -111,6 +150,14 @@ interface Api {
   onSearchLog(cb: (p: SearchLogPayload) => void): () => void;
   jobsRead(): Promise<JobsResult>;
   reportOpen(): Promise<{ ok: boolean; error?: string | null; path?: string }>;
+  applicationsRead(): Promise<ApplicationDashboardResult>;
+  applicationsRefresh(): Promise<{ code: number | null; output: string }>;
+  applicationsFlag(
+    identityKey: string,
+    flag: ApplicationOutcomeFlag,
+  ): Promise<{ code: number | null; output: string }>;
+  applicationsUndo(identityKey: string): Promise<{ code: number | null; output: string }>;
+  applicationsReportOpen(): Promise<{ ok: boolean; error?: string | null; path?: string }>;
   agentsList(): Promise<AgentsResult>;
   configRead(name: string): Promise<ConfigReadResult>;
   configWrite(name: string, text: string): Promise<ConfigWriteResult>;
@@ -191,6 +238,26 @@ export const api: Api = {
   reportOpen: () =>
     window.api
       ? window.api.reportOpen()
+      : Promise.resolve({ ok: false, error: 'desktop-only feature' }),
+  applicationsRead: () =>
+    window.api
+      ? window.api.applicationsRead()
+      : Promise.resolve({ exists: true, summary: {}, applications: [] }),
+  applicationsRefresh: () =>
+    window.api
+      ? window.api.applicationsRefresh()
+      : Promise.resolve({ code: 0, output: 'browser preview refreshed' }),
+  applicationsFlag: (identityKey, flag) =>
+    window.api
+      ? window.api.applicationsFlag(identityKey, flag)
+      : Promise.resolve({ code: 0, output: 'browser preview updated' }),
+  applicationsUndo: (identityKey) =>
+    window.api
+      ? window.api.applicationsUndo(identityKey)
+      : Promise.resolve({ code: 0, output: 'browser preview restored' }),
+  applicationsReportOpen: () =>
+    window.api
+      ? window.api.applicationsReportOpen()
       : Promise.resolve({ ok: false, error: 'desktop-only feature' }),
   agentsList: () =>
     window.api

@@ -4,6 +4,10 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const { spawn } = require('child_process');
+const {
+  validateApplicationIdentity,
+  validateApplicationMutation,
+} = require('./safety.cjs');
 
 const PIPELINE_ROOT = path.resolve(__dirname, '..', '..');
 const GUI_ROOT = path.resolve(__dirname, '..');
@@ -390,6 +394,51 @@ ipcMain.handle('report:open', async () => {
   const p = path.join(PIPELINE_ROOT, 'reports', 'job_matches.html');
   const result = await shell.openPath(p);
   return { ok: result === '', error: result || null, path: p };
+});
+
+ipcMain.handle('applications:refresh', async () => (
+  runPowerShell(['-File', path.join(PIPELINE_ROOT, 'run.ps1'), 'applications-report'])
+));
+
+ipcMain.handle('applications:read', async () => {
+  const result = readJsonSafe(path.join('reports', 'applications_dashboard.json'));
+  const data = result.data && typeof result.data === 'object' ? result.data : {};
+  return {
+    exists: result.exists,
+    summary: data.summary && typeof data.summary === 'object' ? data.summary : {},
+    applications: Array.isArray(data.applications) ? data.applications : [],
+    error: result.error || null,
+  };
+});
+
+ipcMain.handle('applications:flag', async (_event, payload) => {
+  try {
+    const { identityKey, flag } = validateApplicationMutation(payload);
+    return runPowerShell([
+      '-File', path.join(PIPELINE_ROOT, 'run.ps1'),
+      'application-flag', identityKey, flag,
+    ]);
+  } catch (err) {
+    return { code: -1, output: String(err.message || err) };
+  }
+});
+
+ipcMain.handle('applications:undo', async (_event, payload) => {
+  try {
+    const identityKey = validateApplicationIdentity(payload && payload.identityKey);
+    return runPowerShell([
+      '-File', path.join(PIPELINE_ROOT, 'run.ps1'),
+      'application-undo', identityKey,
+    ]);
+  } catch (err) {
+    return { code: -1, output: String(err.message || err) };
+  }
+});
+
+ipcMain.handle('applications:report-open', async () => {
+  const reportPath = path.join(PIPELINE_ROOT, 'reports', 'applications_dashboard.html');
+  const result = await shell.openPath(reportPath);
+  return { ok: result === '', error: result || null, path: reportPath };
 });
 
 ipcMain.handle('agents:list', async () => {
