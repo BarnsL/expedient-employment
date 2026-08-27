@@ -16,3 +16,4 @@ dist/
 /build/
 release/
 *.egg-info/
+.worktrees/
