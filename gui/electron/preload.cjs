@@ -28,4 +28,32 @@ contextBridge.exposeInMainWorld('api', {
   sessionsRead: () => ipcRenderer.invoke('sessions:read'),
   awbLaunch: () => ipcRenderer.invoke('awb:launch'),
   loginUrl: (siteKey) => ipcRenderer.invoke('login:url', siteKey),
+  controlStatus: () => ipcRenderer.invoke('control:status'),
+  assistantProviders: () => ipcRenderer.invoke('assistant:providers'),
+  assistantModels: (provider) => ipcRenderer.invoke('assistant:models', provider),
+  assistantConversations: () => ipcRenderer.invoke('assistant:conversations'),
+  assistantCreate: (input) => ipcRenderer.invoke('assistant:create', input),
+  assistantMessages: (conversationId) => ipcRenderer.invoke('assistant:messages', conversationId),
+  assistantQueue: (conversationId) => ipcRenderer.invoke('assistant:queue', conversationId),
+  assistantEvents: (conversationId) => ipcRenderer.invoke('assistant:events', conversationId),
+  assistantAttach: (conversationId, input) => (
+    ipcRenderer.invoke('assistant:attach', conversationId, input)
+  ),
+  assistantSend: (conversationId, input) => (
+    ipcRenderer.invoke('assistant:send', conversationId, input)
+  ),
+  assistantRun: (conversationId) => ipcRenderer.invoke('assistant:run', conversationId),
+  assistantEdit: (messageId, content) => ipcRenderer.invoke('assistant:edit', messageId, content),
+  assistantCancel: (messageId) => ipcRenderer.invoke('assistant:cancel', messageId),
+  assistantRetry: (messageId) => ipcRenderer.invoke('assistant:retry', messageId),
+  assistantClear: (conversationId) => ipcRenderer.invoke('assistant:clear', conversationId),
+  toolsList: () => ipcRenderer.invoke('tools:list'),
+  workflowsDryRun: (input) => ipcRenderer.invoke('workflows:dry-run', input),
+  schedulesList: () => ipcRenderer.invoke('schedules:list'),
+  schedulesCreate: (input) => ipcRenderer.invoke('schedules:create', input),
+  schedulesToggle: (scheduleId, enabled) => (
+    ipcRenderer.invoke('schedules:toggle', scheduleId, enabled)
+  ),
+  schedulesRunDue: () => ipcRenderer.invoke('schedules:run-due'),
+  schedulesHistory: (scheduleId) => ipcRenderer.invoke('schedules:history', scheduleId),
 });

@@ -142,6 +142,105 @@ export interface SearchLogPayload {
   stream: 'stdout' | 'stderr';
 }
 
+export interface ControlStatus {
+  ready: boolean;
+  port: number | null;
+  error?: string;
+}
+
+export interface ProviderReadiness {
+  name: string;
+  ready: boolean;
+  detail?: string;
+  credential_configured?: boolean;
+}
+
+export interface ConversationRecord {
+  id: string;
+  title: string;
+  provider: string;
+  model: string;
+  allow_image_upload: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type AssistantMessageStatus =
+  | 'queued'
+  | 'processing'
+  | 'completed'
+  | 'cancelled'
+  | 'failed'
+  | 'awaiting_approval'
+  | 'needs_handoff';
+
+export interface AssistantMessage {
+  id: string;
+  conversation_id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  status: AssistantMessageStatus;
+  sequence: number;
+  retry_of: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AssistantAttachment {
+  id: string;
+  conversation_id: string;
+  filename: string;
+  mime_type: string;
+  byte_count: number;
+  digest: string;
+  created_at: string;
+}
+
+export interface AssistantEvent {
+  id: number;
+  message_id: string;
+  event_type: string;
+  payload: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ToolContract {
+  name: string;
+  description: string;
+  policy: 'read' | 'local_write' | 'external_draft' | 'external_action';
+  input_schema: Record<string, unknown>;
+}
+
+export interface WorkflowStepInput {
+  id: string;
+  tool: string;
+  arguments: Record<string, unknown>;
+  depends_on?: string[];
+  max_attempts?: number;
+}
+
+export interface WorkflowInput {
+  name: string;
+  steps: WorkflowStepInput[];
+}
+
+export interface ScheduleRecord {
+  id: number;
+  name: string;
+  workflow: WorkflowInput;
+  recurrence: {
+    kind: 'interval' | 'daily';
+    interval_minutes: number;
+    local_time: string;
+    timezone_name: string;
+  };
+  enabled: boolean;
+  next_run_at: string;
+  last_run_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 interface Api {
   doctor(): Promise<DoctorResult>;
   services(): Promise<ServicesMap>;
@@ -164,6 +263,45 @@ interface Api {
   sessionsRead(): Promise<SessionsResult>;
   awbLaunch(): Promise<AwbLaunchResult>;
   loginUrl(siteKey: string): Promise<{ ok: boolean; url?: string; error?: string }>;
+  controlStatus(): Promise<ControlStatus>;
+  assistantProviders(): Promise<ProviderReadiness[]>;
+  assistantModels(provider: string): Promise<string[]>;
+  assistantConversations(): Promise<ConversationRecord[]>;
+  assistantCreate(input: {
+    provider: string;
+    model: string;
+    title?: string;
+    allow_image_upload?: boolean;
+  }): Promise<ConversationRecord>;
+  assistantMessages(conversationId: string): Promise<AssistantMessage[]>;
+  assistantQueue(conversationId: string): Promise<AssistantMessage[]>;
+  assistantEvents(conversationId: string): Promise<AssistantEvent[]>;
+  assistantAttach(conversationId: string, input: {
+    filename: string;
+    mime_type: string;
+    data_base64: string;
+  }): Promise<AssistantAttachment>;
+  assistantSend(conversationId: string, input: {
+    content: string;
+    attachment_ids?: string[];
+  }): Promise<AssistantMessage>;
+  assistantRun(conversationId: string): Promise<AssistantMessage | null>;
+  assistantEdit(messageId: string, content: string): Promise<AssistantMessage>;
+  assistantCancel(messageId: string): Promise<AssistantMessage>;
+  assistantRetry(messageId: string): Promise<AssistantMessage>;
+  assistantClear(conversationId: string): Promise<{ cleared: boolean }>;
+  toolsList(): Promise<ToolContract[]>;
+  workflowsDryRun(input: WorkflowInput): Promise<Record<string, unknown>>;
+  schedulesList(): Promise<ScheduleRecord[]>;
+  schedulesCreate(input: {
+    name: string;
+    workflow: WorkflowInput;
+    recurrence: ScheduleRecord['recurrence'];
+    enabled?: boolean;
+  }): Promise<ScheduleRecord>;
+  schedulesToggle(scheduleId: number, enabled: boolean): Promise<ScheduleRecord>;
+  schedulesRunDue(): Promise<Record<string, unknown>[]>;
+  schedulesHistory(scheduleId: number): Promise<Record<string, unknown>[]>;
 }
 
 declare global {
@@ -193,6 +331,12 @@ const DEMO_SERVICES: ServicesMap = {
   awb: { up: false, app: null, isBridge: false, raw: 'desktop-only' },
   paperclip: { up: false, raw: 'desktop-only' },
   resumeMatcher: { up: false, raw: 'desktop-only' },
+};
+
+const DEMO_PROVIDER: ProviderReadiness = {
+  name: 'FreeChain',
+  ready: false,
+  detail: 'Desktop control service is not connected.',
 };
 
 const DEMO_JOBS: JobRow[] = [
@@ -287,4 +431,91 @@ export const api: Api = {
     window.api
       ? window.api.loginUrl(siteKey)
       : Promise.resolve({ ok: false, error: `desktop-only: no login url for ${siteKey}` }),
+  controlStatus: () =>
+    window.api
+      ? window.api.controlStatus()
+      : Promise.resolve({ ready: false, port: null, error: 'desktop-only feature' }),
+  assistantProviders: () =>
+    window.api ? window.api.assistantProviders() : Promise.resolve([DEMO_PROVIDER]),
+  assistantModels: (provider) =>
+    window.api ? window.api.assistantModels(provider) : Promise.resolve(['auto']),
+  assistantConversations: () =>
+    window.api ? window.api.assistantConversations() : Promise.resolve([]),
+  assistantCreate: (input) =>
+    window.api
+      ? window.api.assistantCreate(input)
+      : Promise.resolve({
+          id: 'demo-conversation',
+          title: input.title || 'New conversation',
+          provider: input.provider,
+          model: input.model,
+          allow_image_upload: Boolean(input.allow_image_upload),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }),
+  assistantMessages: (conversationId) =>
+    window.api ? window.api.assistantMessages(conversationId) : Promise.resolve([]),
+  assistantQueue: (conversationId) =>
+    window.api ? window.api.assistantQueue(conversationId) : Promise.resolve([]),
+  assistantEvents: (conversationId) =>
+    window.api ? window.api.assistantEvents(conversationId) : Promise.resolve([]),
+  assistantAttach: (conversationId, input) =>
+    window.api
+      ? window.api.assistantAttach(conversationId, input)
+      : Promise.resolve({
+          id: `demo-attachment-${Date.now()}`,
+          conversation_id: conversationId,
+          filename: input.filename,
+          mime_type: input.mime_type,
+          byte_count: input.data_base64.length,
+          digest: 'browser-preview',
+          created_at: new Date().toISOString(),
+        }),
+  assistantSend: (conversationId, input) =>
+    window.api
+      ? window.api.assistantSend(conversationId, input)
+      : Promise.resolve({
+          id: `demo-message-${Date.now()}`,
+          conversation_id: conversationId,
+          role: 'user',
+          content: input.content,
+          status: 'queued',
+          sequence: 1,
+          retry_of: '',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }),
+  assistantRun: (conversationId) =>
+    window.api ? window.api.assistantRun(conversationId) : Promise.resolve(null),
+  assistantEdit: (messageId, content) =>
+    window.api
+      ? window.api.assistantEdit(messageId, content)
+      : Promise.reject(new Error('Editing queued messages requires the desktop app.')),
+  assistantCancel: (messageId) =>
+    window.api
+      ? window.api.assistantCancel(messageId)
+      : Promise.reject(new Error('Cancelling messages requires the desktop app.')),
+  assistantRetry: (messageId) =>
+    window.api
+      ? window.api.assistantRetry(messageId)
+      : Promise.reject(new Error('Retrying messages requires the desktop app.')),
+  assistantClear: (conversationId) =>
+    window.api ? window.api.assistantClear(conversationId) : Promise.resolve({ cleared: true }),
+  toolsList: () => window.api ? window.api.toolsList() : Promise.resolve([]),
+  workflowsDryRun: (input) =>
+    window.api
+      ? window.api.workflowsDryRun(input)
+      : Promise.resolve({ status: 'dry_run', input }),
+  schedulesList: () => window.api ? window.api.schedulesList() : Promise.resolve([]),
+  schedulesCreate: (input) =>
+    window.api
+      ? window.api.schedulesCreate(input)
+      : Promise.reject(new Error('Schedules require the desktop app.')),
+  schedulesToggle: (scheduleId, enabled) =>
+    window.api
+      ? window.api.schedulesToggle(scheduleId, enabled)
+      : Promise.reject(new Error('Schedules require the desktop app.')),
+  schedulesRunDue: () => window.api ? window.api.schedulesRunDue() : Promise.resolve([]),
+  schedulesHistory: (scheduleId) =>
+    window.api ? window.api.schedulesHistory(scheduleId) : Promise.resolve([]),
 };

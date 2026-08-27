@@ -8,11 +8,18 @@ const {
   validateApplicationIdentity,
   validateApplicationMutation,
 } = require('./safety.cjs');
+const {
+  ControlServiceManager,
+  packagedPipelineRoot,
+} = require('./control-service.cjs');
 
-const PIPELINE_ROOT = path.resolve(__dirname, '..', '..');
+const PIPELINE_ROOT = app.isPackaged
+  ? packagedPipelineRoot(process.resourcesPath)
+  : path.resolve(__dirname, '..', '..');
 const GUI_ROOT = path.resolve(__dirname, '..');
 
 let mainWindow = null;
+const controlService = new ControlServiceManager();
 // child processes spawned by this app instance (killed on quit)
 const spawnedChildren = new Set();
 
@@ -58,6 +65,7 @@ app.whenReady().then(() => {
   // best-effort, non-blocking backend auto-launch (never blocks window creation)
   void startPaperclip().catch(() => {});
   void startResumeMatcher().catch(() => {});
+  void ensureControlService().catch(() => {});
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -68,6 +76,7 @@ app.on('window-all-closed', () => { app.quit(); });
 // kill only the child processes this instance spawned (Paperclip node).
 // Docker containers and pre-existing services are left running.
 app.on('before-quit', () => {
+  controlService.stop();
   for (const child of spawnedChildren) {
     try { child.kill(); } catch { /* already gone */ }
   }
@@ -108,6 +117,27 @@ function resolvePowerShell() {
 function resolveNode() {
   if (process.env.NODE_EXE) return process.env.NODE_EXE;
   return process.platform === 'win32' ? 'node.exe' : 'node';
+}
+
+function resolvePython() {
+  if (process.env.PYTHON_EXE) return process.env.PYTHON_EXE;
+  return findOnPath('python') || findOnPath('python3') || 'python';
+}
+
+async function ensureControlService() {
+  const status = controlService.status();
+  if (status.ready) return status;
+  return controlService.start({
+    pythonExecutable: resolvePython(),
+    projectRoot: PIPELINE_ROOT,
+    dataRoot: path.join(app.getPath('userData'), 'control'),
+    nodeExecutable: process.execPath,
+  });
+}
+
+async function controlRequest(method, requestPath, payload) {
+  await ensureControlService();
+  return controlService.request(method, requestPath, payload);
 }
 
 function sleep(ms) {
@@ -528,3 +558,90 @@ ipcMain.handle('login:url', async (_e, siteKey) => {
   if (!site || !site.login_url) return { ok: false, error: `no login_url for site "${siteKey}"` };
   return { ok: true, url: site.login_url };
 });
+
+// Authenticated control service. Renderer methods map to fixed API routes and
+// never receive the service bearer token.
+function controlSafeId(value, label = 'identifier') {
+  const text = String(value || '');
+  if (!/^[A-Za-z0-9_-]{1,160}$/.test(text)) throw new Error(`Invalid ${label}.`);
+  return text;
+}
+
+function controlScheduleId(value) {
+  const parsed = Number.parseInt(String(value), 10);
+  if (!Number.isInteger(parsed) || parsed < 1) throw new Error('Invalid schedule identifier.');
+  return parsed;
+}
+
+ipcMain.handle('control:status', async () => {
+  try {
+    return await ensureControlService();
+  } catch (err) {
+    return { ready: false, port: null, error: String(err.message || err) };
+  }
+});
+ipcMain.handle('assistant:providers', () => controlRequest('GET', '/v1/providers'));
+ipcMain.handle('assistant:models', (_event, provider) => (
+  controlRequest('GET', `/v1/providers/${controlSafeId(provider, 'provider')}/models`)
+));
+ipcMain.handle('assistant:conversations', () => controlRequest('GET', '/v1/conversations'));
+ipcMain.handle('assistant:create', (_event, payload) => (
+  controlRequest('POST', '/v1/conversations', payload || {})
+));
+ipcMain.handle('assistant:messages', (_event, conversationId) => (
+  controlRequest('GET', `/v1/conversations/${controlSafeId(conversationId)}/messages`)
+));
+ipcMain.handle('assistant:queue', (_event, conversationId) => (
+  controlRequest('GET', `/v1/conversations/${controlSafeId(conversationId)}/queue`)
+));
+ipcMain.handle('assistant:events', (_event, conversationId) => (
+  controlRequest('GET', `/v1/conversations/${controlSafeId(conversationId)}/events`)
+));
+ipcMain.handle('assistant:attach', (_event, conversationId, payload) => (
+  controlRequest(
+    'POST',
+    `/v1/conversations/${controlSafeId(conversationId)}/attachments`,
+    payload || {},
+  )
+));
+ipcMain.handle('assistant:send', (_event, conversationId, payload) => (
+  controlRequest(
+    'POST',
+    `/v1/conversations/${controlSafeId(conversationId)}/messages`,
+    payload || {},
+  )
+));
+ipcMain.handle('assistant:run', (_event, conversationId) => (
+  controlRequest('POST', `/v1/conversations/${controlSafeId(conversationId)}/run`, {})
+));
+ipcMain.handle('assistant:edit', (_event, messageId, content) => (
+  controlRequest('PATCH', `/v1/messages/${controlSafeId(messageId)}`, { content })
+));
+ipcMain.handle('assistant:cancel', (_event, messageId) => (
+  controlRequest('POST', `/v1/messages/${controlSafeId(messageId)}/cancel`, {})
+));
+ipcMain.handle('assistant:retry', (_event, messageId) => (
+  controlRequest('POST', `/v1/messages/${controlSafeId(messageId)}/retry`, {})
+));
+ipcMain.handle('assistant:clear', (_event, conversationId) => (
+  controlRequest('DELETE', `/v1/conversations/${controlSafeId(conversationId)}/messages`)
+));
+ipcMain.handle('tools:list', () => controlRequest('GET', '/v1/tools'));
+ipcMain.handle('workflows:dry-run', (_event, payload) => (
+  controlRequest('POST', '/v1/workflows/dry-run', payload || {})
+));
+ipcMain.handle('schedules:list', () => controlRequest('GET', '/v1/schedules'));
+ipcMain.handle('schedules:create', (_event, payload) => (
+  controlRequest('POST', '/v1/schedules', payload || {})
+));
+ipcMain.handle('schedules:toggle', (_event, scheduleId, enabled) => (
+  controlRequest(
+    'POST',
+    `/v1/schedules/${controlScheduleId(scheduleId)}/enabled`,
+    { enabled: Boolean(enabled) },
+  )
+));
+ipcMain.handle('schedules:run-due', () => controlRequest('POST', '/v1/schedules/run-due', {}));
+ipcMain.handle('schedules:history', (_event, scheduleId) => (
+  controlRequest('GET', `/v1/schedules/${controlScheduleId(scheduleId)}/history`)
+));
