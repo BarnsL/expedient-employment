@@ -86,19 +86,21 @@ function validateProviderEnv(value) {
 
 function sanitizedChildEnvironment(environment) {
   const sanitized = { ...environment };
-  const inheritedCredentialEnv = sanitized[PROVIDER_KEY_ENV_KEY];
   const providerKeys = new Set([
     PROVIDER_URL_KEY,
     PROVIDER_KEY_ENV_KEY,
     'FREECHAIN_ACCESS_KEY',
   ]);
-  if (
-    typeof inheritedCredentialEnv === 'string'
-    && PROVIDER_ENV_NAME_PATTERN.test(inheritedCredentialEnv)
-  ) {
-    providerKeys.add(inheritedCredentialEnv);
+  for (const [key, value] of Object.entries(sanitized)) {
+    if (key.toUpperCase() !== PROVIDER_KEY_ENV_KEY || typeof value !== 'string') continue;
+    const inheritedCredentialEnv = value.toUpperCase();
+    if (PROVIDER_ENV_NAME_PATTERN.test(inheritedCredentialEnv)) {
+      providerKeys.add(inheritedCredentialEnv);
+    }
   }
-  for (const key of providerKeys) delete sanitized[key];
+  for (const key of Object.keys(sanitized)) {
+    if (providerKeys.has(key.toUpperCase())) delete sanitized[key];
+  }
   return sanitized;
 }
 

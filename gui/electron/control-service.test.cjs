@@ -158,6 +158,61 @@ test('manager strips ambient provider values when provider environment is omitte
   await manager.stop();
 });
 
+test('manager removes mixed-case ambient aliases before explicit provider values win', async () => {
+  let captured = null;
+  const child = new EventEmitter();
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.kill = () => process.nextTick(() => child.emit('exit', 0));
+  const environment = {
+    eXpEdIeNt_PrOvIdEr_Url: 'http://public.example/v1',
+    ExPeDiEnT_pRoViDeR_kEy_EnV: 'MiXeD_Ambient_Access_Key',
+    fReEcHaIn_AcCeSs_KeY: 'synthetic-fixed-ambient-key',
+    mIxEd_aMbIeNt_aCcEsS_kEy: 'synthetic-selected-ambient-key',
+    Unrelated_Ambient_Setting: 'preserved exactly',
+  };
+  const originalEnvironment = { ...environment };
+  const providerEnv = {
+    EXPEDIENT_PROVIDER_URL: 'http://127.0.0.1:4853/v1',
+    EXPEDIENT_PROVIDER_KEY_ENV: 'FREECHAIN_ACCESS_KEY',
+    FREECHAIN_ACCESS_KEY: 'synthetic-explicit-key',
+  };
+  const manager = new ControlServiceManager({
+    environment,
+    spawnImpl: (_command, _args, options) => {
+      captured = options.env;
+      process.nextTick(() => {
+        child.stdout.write('{"event":"expedient_control_ready","host":"127.0.0.1","port":32128}\n');
+      });
+      return child;
+    },
+  });
+
+  await manager.start({
+    pythonExecutable: 'python-test',
+    projectRoot: 'C:\\app\\pipeline',
+    dataRoot: 'C:\\app\\data',
+    nodeExecutable: 'C:\\app\\electron.exe',
+    providerEnv,
+  });
+
+  const providerNames = new Set([
+    'EXPEDIENT_PROVIDER_URL',
+    'EXPEDIENT_PROVIDER_KEY_ENV',
+    'FREECHAIN_ACCESS_KEY',
+    'MIXED_AMBIENT_ACCESS_KEY',
+  ]);
+  assert.deepEqual(
+    Object.fromEntries(
+      Object.entries(captured).filter(([name]) => providerNames.has(name.toUpperCase())),
+    ),
+    providerEnv,
+  );
+  assert.equal(captured.Unrelated_Ambient_Setting, 'preserved exactly');
+  assert.deepEqual(environment, originalEnvironment);
+  await manager.stop();
+});
+
 test('manager rejects malformed provider environments before spawning', async () => {
   let spawnCount = 0;
   const manager = new ControlServiceManager({

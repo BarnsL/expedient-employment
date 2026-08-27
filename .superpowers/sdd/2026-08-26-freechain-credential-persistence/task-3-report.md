@@ -307,3 +307,98 @@ Em dash matches: 0
 
 1. Live installed FreeChain authentication remains outside this synthetic fix round because no real credential was accessed.
 2. Unrelated environment variables continue to be inherited by the owned child as required for normal process operation. Only active provider keys are removed.
+
+## Fix Round 2: Windows Environment Name Casing
+
+Date: 2026-08-26
+
+### Finding addressed
+
+Windows treats environment variable names case-insensitively, but the Fix Round 1 sanitizer discovered and deleted provider keys with exact-case JavaScript lookups. Mixed-case aliases of both provider configuration keys, `FREECHAIN_ACCESS_KEY`, and the parent-selected credential variable survived in the child environment beside the validated uppercase values.
+
+### Fix
+
+- Selector keys are discovered by comparing their uppercase names with `EXPEDIENT_PROVIDER_KEY_ENV`.
+- Every bounded selector value is normalized to uppercase only for matching the selected credential variable.
+- Provider-key filtering compares each cloned environment name in uppercase against the normalized active provider set.
+- Unrelated names and values retain their original casing and content.
+- The source environment remains unchanged.
+- Explicit validated `providerEnv` values are merged after filtering and are the only active provider entries in the child.
+
+### TDD evidence
+
+Mixed-case ambient alias RED, from `gui`:
+
+```text
+node --test --test-name-pattern="mixed-case ambient aliases" electron/control-service.test.cjs
+
+tests 1
+pass 0
+fail 1
+```
+
+The failure showed all four aliases still present:
+
+```text
+eXpEdIeNt_PrOvIdEr_Url
+ExPeDiEnT_pRoViDeR_kEy_EnV
+fReEcHaIn_AcCeSs_KeY
+mIxEd_aMbIeNt_aCcEsS_kEy
+```
+
+The expected child contained only the three explicit validated uppercase provider entries. After normalized selector discovery and filtering:
+
+```text
+tests 1
+pass 1
+fail 0
+```
+
+### Verification evidence
+
+Focused Electron suites, from `gui`:
+
+```text
+node --test electron/provider-credential-store.test.cjs electron/control-service.test.cjs
+
+tests 10
+pass 10
+fail 0
+```
+
+Focused Python suites, from the repository root:
+
+```text
+python -m unittest tests.test_assistant tests.test_service
+
+Ran 18 tests in 4.016s
+OK
+```
+
+Static and outgoing-scope gates:
+
+```text
+node --check electron/control-service.cjs
+node --check electron/control-service.test.cjs
+node_modules/.bin/eslint.cmd electron/control-service.cjs electron/control-service.test.cjs
+python -m py_compile job_pipeline/assistant.py job_pipeline/service.py tests/test_assistant.py tests/test_service.py
+git diff --check
+
+No validation error. Every command exited 0.
+Raw email matches: 0
+Literal secret-like matches: 0
+Em dash matches: 0
+```
+
+### Security review
+
+- The regression uses only an injected synthetic environment and never reads or modifies the real parent credential state.
+- Mixed-case aliases cannot survive beside or override the explicit provider set on Windows.
+- A mixed-case selector value still identifies its credential variable for removal after bounded uppercase normalization.
+- Unrelated variables preserve their exact original names and values.
+- Explicit provider validation remains case-sensitive and unchanged.
+- No real credential, external request, public status, command argument, renderer data, transcript, database, or log entered this fix round.
+
+### Remaining concern
+
+Live installed FreeChain authentication remains outside this synthetic fix round because no real credential was accessed.
