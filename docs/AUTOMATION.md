@@ -9,6 +9,8 @@ Automations can use either:
 
 Each schedule stores its workflow, next due time, enabled state, lease state, and run history. A missed interval is coalesced into one due run. The scheduler does not replay an unlimited backlog.
 
+The service serializes scheduler database transactions so simultaneous loopback requests cannot share an SQLite connection unsafely.
+
 ## Default scheduled job hunt
 
 The Automations page can create a recurring recruiting workflow with a bounded pipeline request. The default asks for up to 250 recruiting results and stores its pipeline artifacts locally. It does not apply to jobs.

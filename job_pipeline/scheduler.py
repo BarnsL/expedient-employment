@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from dataclasses import asdict, dataclass
 from datetime import datetime, time as wall_time, timedelta, timezone
 from pathlib import Path
@@ -146,7 +147,8 @@ class ScheduleService:
         database_path.parent.mkdir(parents=True, exist_ok=True)
         self.runner = runner
         self.broker = broker
-        self.connection = sqlite3.connect(database_path, timeout=10)
+        self._lock = threading.RLock()
+        self.connection = sqlite3.connect(database_path, timeout=10, check_same_thread=False)
         self.connection.row_factory = sqlite3.Row
         self.connection.executescript(
             """
@@ -177,8 +179,9 @@ class ScheduleService:
         self.connection.commit()
 
     def close(self) -> None:
-        self.connection.commit()
-        self.connection.close()
+        with self._lock:
+            self.connection.commit()
+            self.connection.close()
 
     def _validate_workflow(self, definition: WorkflowDefinition) -> None:
         self.runner.validate(definition)
@@ -207,25 +210,26 @@ class ScheduleService:
         current = _as_utc(now or datetime.now(timezone.utc))
         next_run = current if recurrence.kind == "interval" else recurrence.next_after(current)
         stamp = utc_now()
-        cursor = self.connection.execute(
-            """
-            INSERT INTO schedules(
-                name, workflow_json, recurrence_json, enabled, next_run_at,
-                last_run_at, locked_until, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?)
-            """,
-            (
-                normalized_name,
-                _workflow_json(workflow),
-                json.dumps(asdict(recurrence), sort_keys=True),
-                int(enabled),
-                _iso(next_run),
-                stamp,
-                stamp,
-            ),
-        )
-        self.connection.commit()
-        return self.get(int(cursor.lastrowid))
+        with self._lock:
+            cursor = self.connection.execute(
+                """
+                INSERT INTO schedules(
+                    name, workflow_json, recurrence_json, enabled, next_run_at,
+                    last_run_at, locked_until, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?)
+                """,
+                (
+                    normalized_name,
+                    _workflow_json(workflow),
+                    json.dumps(asdict(recurrence), sort_keys=True),
+                    int(enabled),
+                    _iso(next_run),
+                    stamp,
+                    stamp,
+                ),
+            )
+            self.connection.commit()
+            return self.get(int(cursor.lastrowid))
 
     @staticmethod
     def _record(row: sqlite3.Row) -> ScheduleRecord:
@@ -243,20 +247,20 @@ class ScheduleService:
         )
 
     def get(self, schedule_id: int) -> ScheduleRecord:
-        row = self.connection.execute(
-            "SELECT * FROM schedules WHERE id=?", (schedule_id,)
-        ).fetchone()
+        with self._lock:
+            row = self.connection.execute(
+                "SELECT * FROM schedules WHERE id=?", (schedule_id,)
+            ).fetchone()
         if not row:
             raise ScheduleValidationError("Schedule does not exist.")
         return self._record(row)
 
     def list(self) -> list[ScheduleRecord]:
-        return [
-            self._record(row)
-            for row in self.connection.execute(
+        with self._lock:
+            rows = self.connection.execute(
                 "SELECT * FROM schedules ORDER BY enabled DESC, next_run_at, id"
             ).fetchall()
-        ]
+        return [self._record(row) for row in rows]
 
     def set_enabled(
         self,
@@ -265,27 +269,29 @@ class ScheduleService:
         *,
         now: datetime | None = None,
     ) -> ScheduleRecord:
-        schedule = self.get(schedule_id)
-        current = _as_utc(now or datetime.now(timezone.utc))
-        next_run = current if enabled else schedule.next_run_at
-        self.connection.execute(
-            "UPDATE schedules SET enabled=?, next_run_at=?, locked_until=NULL, updated_at=? WHERE id=?",
-            (int(enabled), _iso(next_run), utc_now(), schedule_id),
-        )
-        self.connection.commit()
-        return self.get(schedule_id)
+        with self._lock:
+            schedule = self.get(schedule_id)
+            current = _as_utc(now or datetime.now(timezone.utc))
+            next_run = current if enabled else schedule.next_run_at
+            self.connection.execute(
+                "UPDATE schedules SET enabled=?, next_run_at=?, locked_until=NULL, updated_at=? WHERE id=?",
+                (int(enabled), _iso(next_run), utc_now(), schedule_id),
+            )
+            self.connection.commit()
+            return self.get(schedule_id)
 
     def due(self, *, now: datetime, limit: int = 10) -> list[ScheduleRecord]:
         current = _as_utc(now)
-        rows = self.connection.execute(
-            """
-            SELECT * FROM schedules
-            WHERE enabled=1 AND next_run_at<=?
-              AND (locked_until IS NULL OR locked_until<=?)
-            ORDER BY next_run_at, id LIMIT ?
-            """,
-            (_iso(current), _iso(current), max(1, min(int(limit), 100))),
-        ).fetchall()
+        with self._lock:
+            rows = self.connection.execute(
+                """
+                SELECT * FROM schedules
+                WHERE enabled=1 AND next_run_at<=?
+                  AND (locked_until IS NULL OR locked_until<=?)
+                ORDER BY next_run_at, id LIMIT ?
+                """,
+                (_iso(current), _iso(current), max(1, min(int(limit), 100))),
+            ).fetchall()
         return [self._record(row) for row in rows]
 
     def claim(
@@ -298,16 +304,17 @@ class ScheduleService:
         """Atomically acquire a bounded wake lease across scheduler processes."""
         current = _as_utc(now)
         locked_until = current + timedelta(seconds=max(30, min(int(lease_seconds), 3600)))
-        cursor = self.connection.execute(
-            """
-            UPDATE schedules SET locked_until=?, updated_at=?
-            WHERE id=? AND enabled=1
-              AND (locked_until IS NULL OR locked_until<=?)
-            """,
-            (_iso(locked_until), utc_now(), schedule_id, _iso(current)),
-        )
-        self.connection.commit()
-        return cursor.rowcount == 1
+        with self._lock:
+            cursor = self.connection.execute(
+                """
+                UPDATE schedules SET locked_until=?, updated_at=?
+                WHERE id=? AND enabled=1
+                  AND (locked_until IS NULL OR locked_until<=?)
+                """,
+                (_iso(locked_until), utc_now(), schedule_id, _iso(current)),
+            )
+            self.connection.commit()
+            return cursor.rowcount == 1
 
     def run_due(self, *, now: datetime, limit: int = 10) -> list[dict[str, Any]]:
         """Run each due schedule once and coalesce any missed recurrence window."""
@@ -334,25 +341,26 @@ class ScheduleService:
                 status = "failed"
                 error = redact_secrets(str(exc))[:500]
             finished = utc_now()
-            self.connection.execute(
-                """
-                INSERT INTO schedule_runs(
-                    schedule_id, workflow_run_id, status, error_summary,
-                    started_at, finished_at
-                ) VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (schedule.id, workflow_run_id, status, error[:500], started, finished),
-            )
             next_run = schedule.recurrence.next_after(current)
-            self.connection.execute(
-                """
-                UPDATE schedules
-                SET last_run_at=?, next_run_at=?, locked_until=NULL, updated_at=?
-                WHERE id=?
-                """,
-                (_iso(current), _iso(next_run), finished, schedule.id),
-            )
-            self.connection.commit()
+            with self._lock:
+                self.connection.execute(
+                    """
+                    INSERT INTO schedule_runs(
+                        schedule_id, workflow_run_id, status, error_summary,
+                        started_at, finished_at
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (schedule.id, workflow_run_id, status, error[:500], started, finished),
+                )
+                self.connection.execute(
+                    """
+                    UPDATE schedules
+                    SET last_run_at=?, next_run_at=?, locked_until=NULL, updated_at=?
+                    WHERE id=?
+                    """,
+                    (_iso(current), _iso(next_run), finished, schedule.id),
+                )
+                self.connection.commit()
             summaries.append({
                 "schedule_id": schedule.id,
                 "workflow_run_id": workflow_run_id,
@@ -363,8 +371,9 @@ class ScheduleService:
         return summaries
 
     def history(self, schedule_id: int) -> list[dict[str, Any]]:
-        rows = self.connection.execute(
-            "SELECT * FROM schedule_runs WHERE schedule_id=? ORDER BY id DESC",
-            (schedule_id,),
-        ).fetchall()
+        with self._lock:
+            rows = self.connection.execute(
+                "SELECT * FROM schedule_runs WHERE schedule_id=? ORDER BY id DESC",
+                (schedule_id,),
+            ).fetchall()
         return [dict(row) for row in rows]

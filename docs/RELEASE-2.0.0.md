@@ -37,3 +37,4 @@ No Wigolo or Maxun source or internal implementation material is present. Compar
 Release verification includes the complete Python suite, renderer tests and build, Electron tests, dependency audits, static analysis, tracked-source and packaged-payload privacy scans, three synthetic recruiting trials, installed control-service smoke tests, Start Menu verification, and a visible app launch.
 
 The Windows package includes the pinned Python timezone fallback required for named daily schedules on systems without an IANA timezone database.
+Scheduler storage is synchronized across the loopback service's concurrent request threads.

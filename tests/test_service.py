@@ -13,7 +13,7 @@ from pathlib import Path
 from job_pipeline.assistant import AssistantResponse, ConversationService
 from job_pipeline.scheduler import ScheduleService
 from job_pipeline.service import ControlApplication, ControlServer
-from job_pipeline.tool_broker import ToolBroker
+from job_pipeline.tool_broker import ToolBroker, ToolPolicy, ToolResult, ToolSpec
 from job_pipeline.web_workflows import WorkflowRunner
 
 
@@ -34,7 +34,15 @@ class ServiceTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         root = Path(self.temp.name)
-        self.broker = ToolBroker()
+        self.broker = ToolBroker([
+            ToolSpec(
+                name="test.read",
+                description="Return a bounded local test value.",
+                policy=ToolPolicy.READ,
+                input_schema={"type": "object", "additionalProperties": False},
+                handler=lambda _arguments, _context: ToolResult(data={"ok": True}),
+            )
+        ])
         self.assistant = ConversationService(
             root / "assistant.sqlite3",
             root / "attachments",
@@ -148,6 +156,19 @@ class ServiceTests(unittest.TestCase):
         application = ControlApplication(self.assistant, self.scheduler, self.broker)
         with self.assertRaises(ValueError):
             ControlServer(application, "token", host="0.0.0.0", port=0)
+
+    def test_schedule_route_uses_thread_safe_storage(self) -> None:
+        status, created = self.request("POST", "/v1/schedules", {
+            "name": "Threaded schedule",
+            "workflow": {
+                "name": "threaded-read",
+                "steps": [{"id": "read", "tool": "test.read", "arguments": {}}],
+            },
+            "recurrence": {"kind": "interval", "interval_minutes": 30},
+            "enabled": True,
+        })
+        self.assertEqual(status, 201)
+        self.assertEqual(created["name"], "Threaded schedule")
 
 
 if __name__ == "__main__":
