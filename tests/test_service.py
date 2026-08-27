@@ -5,14 +5,16 @@ from __future__ import annotations
 import base64
 import http.client
 import json
+import os
 import tempfile
 import threading
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from job_pipeline.assistant import AssistantResponse, ConversationService
 from job_pipeline.scheduler import ScheduleService
-from job_pipeline.service import ControlApplication, ControlServer
+from job_pipeline.service import ControlApplication, ControlServer, build_default_runtime
 from job_pipeline.tool_broker import ToolBroker, ToolPolicy, ToolResult, ToolSpec
 from job_pipeline.web_workflows import WorkflowRunner
 
@@ -169,6 +171,16 @@ class ServiceTests(unittest.TestCase):
         })
         self.assertEqual(status, 201)
         self.assertEqual(created["name"], "Threaded schedule")
+
+    def test_default_runtime_targets_freechain_with_its_credential_environment(self) -> None:
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {}, clear=True):
+            runtime = build_default_runtime(Path(directory), Path(directory) / "data")
+            try:
+                provider = runtime.assistant._providers["FreeChain"]
+                self.assertEqual(provider.base_url, "http://127.0.0.1:4853/v1")
+                self.assertEqual(provider.credential_env, "FREECHAIN_ACCESS_KEY")
+            finally:
+                runtime.close()
 
 
 if __name__ == "__main__":

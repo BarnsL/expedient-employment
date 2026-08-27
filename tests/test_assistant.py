@@ -202,6 +202,49 @@ class AssistantTests(unittest.TestCase):
         self.assertNotIn("fixture-key", str(response))
         self.assertEqual(seen[-1]["headers"]["Authorization"], "Bearer fixture-key")
 
+    def test_openai_provider_readiness_requires_an_authenticated_model_list(self) -> None:
+        credential_env = "TEST_FREECHAIN_ACCESS_KEY"
+        credential = "synthetic-provider-key"
+
+        def provider(transport):
+            return OpenAICompatibleProvider(
+                "FreeChain",
+                "http://127.0.0.1:4853/v1",
+                credential_env=credential_env,
+                transport=transport,
+            )
+
+        with patch.dict(os.environ, {credential_env: ""}, clear=False):
+            missing = provider(lambda *_args: {"data": [{"id": "unused"}]})
+            self.assertFalse(missing.readiness()["ready"])
+
+        failures = (
+            lambda *_args: (_ for _ in ()).throw(ProviderError("connection refused")),
+            lambda *_args: (_ for _ in ()).throw(ProviderError("HTTP 401 unauthorized")),
+            lambda *_args: {"data": "not-a-list"},
+            lambda *_args: {"data": [{}]},
+        )
+        with patch.dict(os.environ, {credential_env: credential}, clear=False):
+            for transport in failures:
+                with self.subTest(transport=transport):
+                    readiness = provider(transport).readiness()
+                    self.assertFalse(readiness["ready"])
+                    self.assertNotIn(credential, str(readiness))
+
+            seen_requests: list[dict[str, object]] = []
+
+            def ready_transport(method, url, headers, _body, _timeout):
+                seen_requests.append({"method": method, "url": url, "headers": dict(headers)})
+                return {"data": [{"id": "freechain-model"}]}
+
+            readiness = provider(ready_transport).readiness()
+
+        self.assertTrue(readiness["ready"])
+        self.assertEqual(len(seen_requests), 1)
+        self.assertEqual(seen_requests[0]["method"], "GET")
+        self.assertTrue(str(seen_requests[0]["url"]).endswith("/models"))
+        self.assertEqual(seen_requests[0]["headers"]["Authorization"], f"Bearer {credential}")
+
     def test_openai_provider_rejects_plaintext_remote_base_url(self) -> None:
         with self.assertRaises(ProviderError):
             OpenAICompatibleProvider("unsafe", "http://public.example/v1", credential_env="KEY")
