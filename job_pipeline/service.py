@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Mapping
 from urllib.parse import unquote, urlsplit
 
+from .app_tools import JobPipelineToolAdapter
 from .assistant import ConversationService, OpenAICompatibleProvider
 from .integrations.only_cli import OnlyCliAdapter
 from .scheduler import Recurrence, ScheduleService
@@ -172,6 +173,13 @@ class ControlApplication:
                 definition,
                 self._workflow_context("dry-run"),
                 dry_run=True,
+            )
+            return 200, _jsonable(result)
+        if path == "/v1/workflows/run":
+            definition = _workflow_from_payload(payload)
+            result = self.scheduler.runner.run(
+                definition,
+                self._workflow_context("interactive-run"),
             )
             return 200, _jsonable(result)
         if path == "/v1/schedules":
@@ -357,7 +365,8 @@ def build_default_runtime(project_root: Path, data_root: Path) -> ControlRuntime
         cli_entry=Path(os.environ["ONLY_CLI_ENTRY"]) if os.environ.get("ONLY_CLI_ENTRY") else None,
         session_dir=data_root / "only-cli",
     )
-    broker = ToolBroker(list(only_cli.tool_specs()))
+    job_tools = JobPipelineToolAdapter(project_root)
+    broker = ToolBroker([*only_cli.tool_specs(), *job_tools.tool_specs()])
     provider_url = os.environ.get("EXPEDIENT_PROVIDER_URL", "http://127.0.0.1:8000/v1")
     provider_key_env = os.environ.get("EXPEDIENT_PROVIDER_KEY_ENV", "")
     providers = {
