@@ -153,3 +153,122 @@ Exit 0. Git printed only existing LF-to-CRLF working-copy notices for `main.cjs`
 2. Task 4 still owns renderer types, visible credential controls, status refresh, and the shared-device warning.
 3. Installed Windows safe-storage behavior and cross-launch chat recovery remain release-level verification work, not Task 2 unit-test scope.
 4. A first targeted ESLint attempt was launched from the repository root, where that package context did not own the Electron paths. It reported no matching files. The final targeted lint was rerun from `gui` and exited 0.
+
+## Fix Round 1: Truthful Clear and Reliable Restart
+
+Date: 2026-08-26
+
+### Findings addressed
+
+1. `ProviderCredentialStore.clear()` previously suppressed every deletion error, cleared the in-memory credential, and reported `saved: false` even when the encrypted record remained. A later launch could decrypt that record again, contradicting the clear result.
+2. Electron main previously called `controlService.stop()` and immediately called `start()`. During an in-flight start, `start()` could return the stale `startPromise`; after a ready start, the old process could still be exiting while a replacement opened the same data directory.
+
+### Fixes
+
+- The credential store now accepts an injected filesystem for deterministic failure testing.
+- `clear()` returns `true` only when the record was deleted or already absent with `ENOENT`.
+- Other deletion failures return `false` and preserve the existing credential, source, and saved state. Main therefore does not restart or claim the change took effect.
+- `ControlServiceManager.stop()` is now asynchronous and idempotent while a stop is active.
+- Stop cancels and settles an in-flight start, sends termination, and waits for `exit` or `close`.
+- Stop rejects after a bounded five-second production timeout. A timed-out child blocks every later start until its exit is observed, preventing data-directory overlap.
+- Child event handlers clear runtime state only when they still own the current child, so a delayed event from an older child cannot erase replacement state.
+- `ControlServiceManager.restart()` serializes restart operations, waits for the complete stop barrier, and then starts one replacement.
+- Electron main now uses `restart()` with a fresh in-memory provider option object. Task 3 provider-environment merging remains unchanged and deferred.
+- Existing control-service tests now await stop and make their synthetic children emit exit, matching the real lifecycle contract.
+
+### TDD evidence
+
+Credential deletion failure red:
+
+```text
+node --test --test-name-pattern="clear preserves truthful state" electron/provider-credential-store.test.cjs
+
+tests 1
+pass 0
+fail 1
+actual: { available: false, source: 'unavailable' }
+expected: false
+```
+
+Credential deletion failure green:
+
+```text
+node --test --test-name-pattern="clear preserves truthful state" electron/provider-credential-store.test.cjs
+
+tests 1
+pass 1
+fail 0
+```
+
+Restart lifecycle red:
+
+```text
+node --test --test-name-pattern="restart cancels|restart times out" electron/control-service.test.cjs
+
+tests 2
+pass 0
+fail 2
+TypeError: manager.restart is not a function
+```
+
+Restart lifecycle green:
+
+```text
+node --test --test-name-pattern="restart cancels|restart times out" electron/control-service.test.cjs
+
+tests 2
+pass 2
+fail 0
+```
+
+### Focused verification evidence
+
+Task 2 control lifecycle only:
+
+```text
+node --test --test-name-pattern="control paths|manager keeps bearer|restart cancels|restart times out" electron/control-service.test.cjs
+
+tests 4
+pass 4
+fail 0
+```
+
+Credential store plus Electron safety:
+
+```text
+node --test electron/provider-credential-store.test.cjs electron/safety.test.cjs
+
+tests 10
+pass 10
+fail 0
+```
+
+Syntax and targeted lint:
+
+```text
+node --check electron/provider-credential-store.cjs
+node --check electron/control-service.cjs
+node --check electron/main.cjs
+node --check electron/preload.cjs
+npm exec eslint -- electron/provider-credential-store.cjs electron/provider-credential-store.test.cjs electron/control-service.cjs electron/control-service.test.cjs electron/main.cjs electron/preload.cjs
+
+No output. Every command exited 0.
+```
+
+Full control-service boundary:
+
+```text
+node --test electron/control-service.test.cjs
+
+tests 5
+pass 4
+fail 1
+```
+
+The only failure remains the committed Task 3 provider-environment injection contract. There are no asynchronous cleanup warnings after the lifecycle-test adaptation.
+
+### Remaining concerns
+
+1. Task 3 must still validate and merge `providerEnv` into the owned Python child. This fix does not move that behavior across task ownership.
+2. If an owned child ignores termination beyond the stop timeout, the manager deliberately refuses to start another child until exit is observed. This is a safe unavailable state rather than a data-directory overlap.
+3. Installed Windows process-exit timing and cross-launch credential behavior remain release-level acceptance work.

@@ -39,6 +39,7 @@ test('persists only encrypted provider credentials across imports, restarts, and
 
   try {
     const store = new ProviderCredentialStore(options);
+    assert.equal(store.clear(), true);
     const imported = store.importFromEnvironment();
     const persistedPath = path.join(userDataPath, 'provider-credential.json');
     const persisted = fs.readFileSync(persistedPath, 'utf8');
@@ -68,13 +69,50 @@ test('persists only encrypted provider credentials across imports, restarts, and
     assert.equal(corruptStore.credential(), null);
     assert.deepEqual(corruptStore.status(), { available: false, source: 'unavailable' });
 
-    store.clear();
+    assert.equal(store.clear(), true);
     assert.equal(fs.existsSync(persistedPath), false);
     assert.deepEqual(store.status(), { available: false, source: 'unavailable' });
 
     assert.deepEqual(store.reimportFromEnvironment(), { available: true, source: 'environment' });
     assert.equal(new ProviderCredentialStore(options).credential(), environment.FREECHAIN_ACCESS_KEY);
     assert.ok(safeStorage.calls.decrypt.length >= 3);
+  } finally {
+    fs.rmSync(userDataPath, { recursive: true, force: true });
+  }
+});
+
+test('clear preserves truthful state when encrypted record deletion fails', () => {
+  const userDataPath = fs.mkdtempSync(path.join(os.tmpdir(), 'expedient-provider-clear-failure-'));
+  const environment = { FREECHAIN_ACCESS_KEY: 'synthetic-provider-key' };
+  const safeStorage = fakeSafeStorage();
+  const persistedPath = path.join(userDataPath, 'provider-credential.json');
+  const fileSystem = {
+    ...fs,
+    rmSync: (target, options) => {
+      if (target === persistedPath) {
+        const error = new Error('synthetic deletion failure');
+        error.code = 'EACCES';
+        throw error;
+      }
+      return fs.rmSync(target, options);
+    },
+  };
+  const store = new ProviderCredentialStore({
+    userDataPath,
+    safeStorage,
+    environment,
+    fileSystem,
+  });
+
+  try {
+    store.importFromEnvironment();
+    const beforeClear = fs.readFileSync(persistedPath, 'utf8');
+
+    assert.equal(store.clear(), false);
+    assert.equal(fs.readFileSync(persistedPath, 'utf8'), beforeClear);
+    assert.equal(store.credential(), environment.FREECHAIN_ACCESS_KEY);
+    assert.equal(store.saved(), true);
+    assert.deepEqual(store.status(), { available: true, source: 'environment' });
   } finally {
     fs.rmSync(userDataPath, { recursive: true, force: true });
   }

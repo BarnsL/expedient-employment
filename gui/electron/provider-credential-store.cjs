@@ -35,12 +35,12 @@ function normalizeCredential(value) {
   return credential;
 }
 
-function credentialFromEnvFile(filePath) {
+function credentialFromEnvFile(filePath, fileSystem = fs) {
   if (typeof filePath !== 'string' || !path.isAbsolute(filePath)) return null;
   try {
-    const stat = fs.lstatSync(filePath);
+    const stat = fileSystem.lstatSync(filePath);
     if (!stat.isFile() || stat.size > MAX_ENV_FILE_BYTES) return null;
-    const contents = fs.readFileSync(filePath);
+    const contents = fileSystem.readFileSync(filePath);
     if (contents.length > MAX_ENV_FILE_BYTES) return null;
     const matches = [];
     for (const line of contents.toString('utf8').replace(/^\uFEFF/, '').split(/\r?\n/)) {
@@ -62,7 +62,7 @@ function isCanonicalBase64(value) {
 }
 
 class ProviderCredentialStore {
-  constructor({ userDataPath, safeStorage, environment = process.env }) {
+  constructor({ userDataPath, safeStorage, environment = process.env, fileSystem = fs }) {
     if (typeof userDataPath !== 'string' || !path.isAbsolute(userDataPath)) {
       throw new TypeError('userDataPath must be absolute.');
     }
@@ -70,6 +70,7 @@ class ProviderCredentialStore {
     this.recordPath = path.join(userDataPath, RECORD_NAME);
     this.safeStorage = safeStorage;
     this.environment = environment && typeof environment === 'object' ? environment : {};
+    this.fileSystem = fileSystem;
     this.currentCredential = null;
     this.currentSource = 'unavailable';
     this.savedCredential = false;
@@ -98,9 +99,9 @@ class ProviderCredentialStore {
     this.setUnavailable();
     if (!this.encryptionAvailable()) return;
     try {
-      const stat = fs.lstatSync(this.recordPath);
+      const stat = this.fileSystem.lstatSync(this.recordPath);
       if (!stat.isFile() || stat.size > MAX_RECORD_BYTES) return;
-      const contents = fs.readFileSync(this.recordPath);
+      const contents = this.fileSystem.readFileSync(this.recordPath);
       if (contents.length > MAX_RECORD_BYTES) return;
       const record = JSON.parse(contents.toString('utf8'));
       if (
@@ -128,7 +129,7 @@ class ProviderCredentialStore {
     }
 
     const configuredPath = this.environment.EXPEDIENT_FREECHAIN_ENV_FILE;
-    const configuredCredential = credentialFromEnvFile(configuredPath);
+    const configuredCredential = credentialFromEnvFile(configuredPath, this.fileSystem);
     if (configuredCredential) {
       return { credential: configuredCredential, source: 'configured file' };
     }
@@ -140,7 +141,7 @@ class ProviderCredentialStore {
         typeof configuredPath !== 'string'
         || path.resolve(configuredPath) !== path.resolve(installedPath)
       ) {
-        const installedCredential = credentialFromEnvFile(installedPath);
+        const installedCredential = credentialFromEnvFile(installedPath, this.fileSystem);
         if (installedCredential) {
           return { credential: installedCredential, source: 'FreeChain file' };
         }
@@ -164,10 +165,14 @@ class ProviderCredentialStore {
         ciphertext: ciphertext.toString('base64'),
         updatedAt: new Date().toISOString(),
       };
-      fs.mkdirSync(this.userDataPath, { recursive: true });
+      this.fileSystem.mkdirSync(this.userDataPath, { recursive: true });
       temporaryPath = `${this.recordPath}.${process.pid}.${Date.now()}.tmp`;
-      fs.writeFileSync(temporaryPath, `${JSON.stringify(record)}\n`, { encoding: 'utf8', mode: 0o600 });
-      fs.renameSync(temporaryPath, this.recordPath);
+      this.fileSystem.writeFileSync(
+        temporaryPath,
+        `${JSON.stringify(record)}\n`,
+        { encoding: 'utf8', mode: 0o600 },
+      );
+      this.fileSystem.renameSync(temporaryPath, this.recordPath);
       temporaryPath = null;
       this.currentCredential = credential;
       this.currentSource = SAFE_SOURCES.has(source) ? source : 'unavailable';
@@ -175,7 +180,7 @@ class ProviderCredentialStore {
       return this.status();
     } catch {
       if (temporaryPath) {
-        try { fs.rmSync(temporaryPath, { force: true }); } catch { /* best effort */ }
+        try { this.fileSystem.rmSync(temporaryPath, { force: true }); } catch { /* best effort */ }
       }
       this.setUnavailable();
       return this.status();
@@ -215,9 +220,13 @@ class ProviderCredentialStore {
   }
 
   clear() {
-    try { fs.rmSync(this.recordPath, { force: true }); } catch { /* fail closed in memory */ }
+    try {
+      this.fileSystem.rmSync(this.recordPath);
+    } catch (error) {
+      if (!error || error.code !== 'ENOENT') return false;
+    }
     this.setUnavailable();
-    return this.status();
+    return true;
   }
 }
 

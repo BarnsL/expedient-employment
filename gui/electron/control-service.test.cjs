@@ -22,7 +22,10 @@ test('manager keeps bearer token out of public status and kills its child', asyn
   child.stdout = new PassThrough();
   child.stderr = new PassThrough();
   child.killedByTest = false;
-  child.kill = () => { child.killedByTest = true; };
+  child.kill = () => {
+    child.killedByTest = true;
+    process.nextTick(() => child.emit('exit', 0));
+  };
   const spawnImpl = (command, args, options) => {
     captured = { command, args, options };
     process.nextTick(() => {
@@ -53,7 +56,7 @@ test('manager keeps bearer token out of public status and kills its child', asyn
   assert.equal(JSON.stringify(status).includes(captured.options.env.EXPEDIENT_CONTROL_TOKEN), false);
   await manager.request('GET', '/v1/health');
   assert.equal(requests[0].token, captured.options.env.EXPEDIENT_CONTROL_TOKEN);
-  manager.stop();
+  await manager.stop();
   assert.equal(child.killedByTest, true);
 });
 
@@ -62,7 +65,7 @@ test('manager passes the supplied provider environment only to its owned child',
   const child = new EventEmitter();
   child.stdout = new PassThrough();
   child.stderr = new PassThrough();
-  child.kill = () => {};
+  child.kill = () => process.nextTick(() => child.emit('exit', 0));
   const providerEnv = {
     EXPEDIENT_PROVIDER_URL: 'http://127.0.0.1:4853/v1',
     EXPEDIENT_PROVIDER_KEY_ENV: 'TEST_FREECHAIN_ACCESS_KEY',
@@ -106,5 +109,89 @@ test('manager passes the supplied provider environment only to its owned child',
   assert.equal(JSON.stringify(status).includes(providerEnv.EXPEDIENT_PROVIDER_URL), false);
   assert.equal(JSON.stringify(manager.status()).includes(providerKey), false);
   assert.equal(JSON.stringify(manager.status()).includes(providerEnv.EXPEDIENT_PROVIDER_URL), false);
-  manager.stop();
+  await manager.stop();
+});
+
+test('restart cancels an in-flight start and waits for exit before spawning one replacement', async () => {
+  const events = [];
+  const children = [];
+  const makeChild = (number) => {
+    const child = new EventEmitter();
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+    child.kill = () => {
+      events.push(`kill-${number}`);
+      if (number === 1) {
+        process.nextTick(() => {
+          events.push('exit-1');
+          child.emit('exit', 0);
+        });
+      } else {
+        process.nextTick(() => child.emit('exit', 0));
+      }
+    };
+    return child;
+  };
+  const manager = new ControlServiceManager({
+    spawnImpl: () => {
+      const number = children.length + 1;
+      if (number === 2) assert.deepEqual(events, ['spawn-1', 'kill-1', 'exit-1']);
+      const child = makeChild(number);
+      children.push(child);
+      events.push(`spawn-${number}`);
+      if (number === 2) {
+        process.nextTick(() => {
+          child.stdout.write('{"event":"expedient_control_ready","host":"127.0.0.1","port":32125}\n');
+        });
+      }
+      return child;
+    },
+  });
+  const options = {
+    pythonExecutable: 'python-test',
+    projectRoot: 'C:\\app\\pipeline',
+    dataRoot: 'C:\\app\\data',
+    nodeExecutable: 'C:\\app\\electron.exe',
+  };
+
+  const firstStartOutcome = manager.start(options).catch((error) => error);
+  const restarted = await manager.restart(options);
+
+  assert.match((await firstStartOutcome).message, /cancelled/i);
+  assert.deepEqual(restarted, { ready: true, port: 32125 });
+  assert.equal(children.length, 2);
+  assert.deepEqual(events, ['spawn-1', 'kill-1', 'exit-1', 'spawn-2']);
+  children[0].emit('exit', 0);
+  assert.deepEqual(manager.status(), { ready: true, port: 32125 });
+  await manager.stop();
+});
+
+test('restart times out safely without overlapping a child that does not exit', async () => {
+  let spawnCount = 0;
+  const child = new EventEmitter();
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.kill = () => {};
+  const manager = new ControlServiceManager({
+    stopTimeoutMs: 10,
+    spawnImpl: () => {
+      spawnCount += 1;
+      process.nextTick(() => {
+        child.stdout.write('{"event":"expedient_control_ready","host":"127.0.0.1","port":32126}\n');
+      });
+      return child;
+    },
+  });
+  const options = {
+    pythonExecutable: 'python-test',
+    projectRoot: 'C:\\app\\pipeline',
+    dataRoot: 'C:\\app\\data',
+    nodeExecutable: 'C:\\app\\electron.exe',
+  };
+
+  await manager.start(options);
+  await assert.rejects(manager.restart(options), /did not exit/i);
+
+  assert.equal(spawnCount, 1);
+  assert.deepEqual(manager.status(), { ready: false, port: null });
 });

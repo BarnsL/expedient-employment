@@ -125,7 +125,7 @@ app.on('window-all-closed', () => { app.quit(); });
 // kill only the child processes this instance spawned (Paperclip node).
 // Docker containers and pre-existing services are left running.
 app.on('before-quit', () => {
-  controlService.stop();
+  void controlService.stop().catch(() => {});
   for (const child of spawnedChildren) {
     try { child.kill(); } catch { /* already gone */ }
   }
@@ -173,11 +173,9 @@ function resolvePython() {
   return findOnPath('python') || findOnPath('python3') || 'python';
 }
 
-async function ensureControlService() {
-  const status = controlService.status();
-  if (status.ready) return status;
+function controlServiceOptions() {
   const credential = providerCredentialStore ? providerCredentialStore.credential() : null;
-  return controlService.start({
+  return {
     pythonExecutable: resolvePython(),
     projectRoot: PIPELINE_ROOT,
     dataRoot: path.join(app.getPath('userData'), 'control'),
@@ -187,7 +185,13 @@ async function ensureControlService() {
       EXPEDIENT_PROVIDER_KEY_ENV: 'FREECHAIN_ACCESS_KEY',
       FREECHAIN_ACCESS_KEY: credential || '',
     },
-  });
+  };
+}
+
+async function ensureControlService() {
+  const status = controlService.status();
+  if (status.ready) return status;
+  return controlService.start(controlServiceOptions());
 }
 
 function providerCredentialStatus() {
@@ -203,8 +207,9 @@ function providerCredentialStatus() {
 }
 
 async function restartOwnedControlService() {
-  controlService.stop();
-  try { await ensureControlService(); } catch { /* status stays credential-only */ }
+  try {
+    await controlService.restart(controlServiceOptions());
+  } catch { /* status stays credential-only */ }
 }
 
 async function controlRequest(method, requestPath, payload) {
@@ -659,8 +664,8 @@ ipcMain.handle('provider-credential:reimport', async () => {
   return providerCredentialStatus();
 });
 ipcMain.handle('provider-credential:clear', async () => {
-  if (providerCredentialStore) providerCredentialStore.clear();
-  await restartOwnedControlService();
+  const cleared = providerCredentialStore ? providerCredentialStore.clear() : false;
+  if (cleared) await restartOwnedControlService();
   return providerCredentialStatus();
 });
 ipcMain.handle('assistant:providers', () => controlRequest('GET', '/v1/providers'));
