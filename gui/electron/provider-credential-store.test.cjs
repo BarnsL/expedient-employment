@@ -33,6 +33,7 @@ function fakeSafeStorage() {
 test('persists only encrypted provider credentials across imports, restarts, and clearing', () => {
   const userDataPath = fs.mkdtempSync(path.join(os.tmpdir(), 'expedient-provider-credential-'));
   const environment = { FREECHAIN_ACCESS_KEY: 'synthetic-provider-key-one' };
+  const initialCredential = environment.FREECHAIN_ACCESS_KEY;
   const safeStorage = fakeSafeStorage();
   const options = { userDataPath, safeStorage, environment };
 
@@ -44,7 +45,8 @@ test('persists only encrypted provider credentials across imports, restarts, and
 
     assert.deepEqual(imported, { available: true, source: 'environment' });
     assert.deepEqual(safeStorage.calls.encrypt, [environment.FREECHAIN_ACCESS_KEY]);
-    assert.equal(persisted.includes(environment.FREECHAIN_ACCESS_KEY), false);
+    const priorCiphertext = JSON.parse(persisted).ciphertext;
+    assert.equal(persisted.includes(initialCredential), false);
     assert.match(persisted, /ciphertext/);
     assert.equal(JSON.stringify(store.status()).includes(environment.FREECHAIN_ACCESS_KEY), false);
 
@@ -52,10 +54,14 @@ test('persists only encrypted provider credentials across imports, restarts, and
     assert.equal(restartedStore.credential(), environment.FREECHAIN_ACCESS_KEY);
 
     environment.FREECHAIN_ACCESS_KEY = 'synthetic-provider-key-two';
+    const replacementCredential = environment.FREECHAIN_ACCESS_KEY;
     assert.deepEqual(store.reimportFromEnvironment(), { available: true, source: 'environment' });
     assert.deepEqual(safeStorage.calls.encrypt, ['synthetic-provider-key-one', 'synthetic-provider-key-two']);
     assert.equal(new ProviderCredentialStore(options).credential(), environment.FREECHAIN_ACCESS_KEY);
-    assert.equal(fs.readFileSync(persistedPath, 'utf8').includes('synthetic-provider-key-one'), false);
+    const replacedPersisted = fs.readFileSync(persistedPath, 'utf8');
+    assert.equal(replacedPersisted.includes(initialCredential), false);
+    assert.equal(replacedPersisted.includes(replacementCredential), false);
+    assert.equal(replacedPersisted.includes(priorCiphertext), false);
 
     fs.writeFileSync(persistedPath, '{"version":1,"provider":"FreeChain","ciphertext":"corrupt"}', 'utf8');
     const corruptStore = new ProviderCredentialStore(options);

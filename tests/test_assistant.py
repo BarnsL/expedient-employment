@@ -240,6 +240,7 @@ class AssistantTests(unittest.TestCase):
             readiness = provider(ready_transport).readiness()
 
         self.assertTrue(readiness["ready"])
+        self.assertNotIn(credential, str(readiness))
         self.assertEqual(len(seen_requests), 1)
         self.assertEqual(seen_requests[0]["method"], "GET")
         self.assertTrue(str(seen_requests[0]["url"]).endswith("/models"))

@@ -65,9 +65,12 @@ test('manager passes the supplied provider environment only to its owned child',
   child.kill = () => {};
   const providerEnv = {
     EXPEDIENT_PROVIDER_URL: 'http://127.0.0.1:4853/v1',
-    EXPEDIENT_PROVIDER_KEY_ENV: 'FREECHAIN_ACCESS_KEY',
-    FREECHAIN_ACCESS_KEY: 'synthetic-provider-key',
+    EXPEDIENT_PROVIDER_KEY_ENV: 'TEST_FREECHAIN_ACCESS_KEY',
+    TEST_FREECHAIN_ACCESS_KEY: 'synthetic-provider-key',
   };
+  const parentProviderEnv = Object.fromEntries(
+    Object.keys(providerEnv).map((name) => [name, process.env[name]]),
+  );
   const manager = new ControlServiceManager({
     spawnImpl: (_command, _args, options) => {
       captured = options;
@@ -89,6 +92,10 @@ test('manager passes the supplied provider environment only to its owned child',
   assert.deepEqual(
     Object.fromEntries(Object.keys(providerEnv).map((name) => [name, captured.env[name]])),
     providerEnv,
+  );
+  assert.deepEqual(
+    Object.fromEntries(Object.keys(providerEnv).map((name) => [name, process.env[name]])),
+    parentProviderEnv,
   );
   assert.equal(JSON.stringify(status).includes(providerEnv.FREECHAIN_ACCESS_KEY), false);
   assert.equal(JSON.stringify(status).includes(providerEnv.EXPEDIENT_PROVIDER_URL), false);
