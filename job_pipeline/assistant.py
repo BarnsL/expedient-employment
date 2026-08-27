@@ -334,17 +334,21 @@ class OpenAICompatibleProvider:
     def models(self) -> list[str]:
         if not self._credential_configured():
             raise ProviderError("Provider credential is not configured.")
+        transport_error: str | None = None
         try:
             payload = self.transport(
                 "GET", f"{self.base_url}/models", self._headers(), None, self.timeout_seconds
             )
         except Exception as exc:
             _reachable, _authenticated, detail = self._probe_failure(exc)
-            raise ProviderError(f"{detail}.") from exc
+            transport_error = f"{detail}."
+        if transport_error is not None:
+            raise ProviderError(transport_error)
         try:
             return self._model_ids(payload)
-        except (AttributeError, TypeError) as exc:
-            raise ProviderError("Provider model response is invalid.") from exc
+        except (AttributeError, TypeError):
+            pass
+        raise ProviderError("Provider model response is invalid.")
 
     @staticmethod
     def _message_payload(request: AssistantRequest) -> list[dict[str, Any]]:
@@ -393,6 +397,7 @@ class OpenAICompatibleProvider:
         if tools:
             body["tools"] = tools
             body["tool_choice"] = "auto"
+        transport_failed = False
         try:
             payload = self.transport(
                 "POST",
@@ -401,12 +406,17 @@ class OpenAICompatibleProvider:
                 body,
                 self.timeout_seconds,
             )
-        except Exception as exc:
-            raise ProviderError("Provider completion request failed.") from exc
+        except Exception:
+            transport_failed = True
+        if transport_failed:
+            raise ProviderError("Provider completion request failed.")
+        message = None
         try:
             message = payload["choices"][0]["message"]
-        except (KeyError, IndexError, TypeError) as exc:
-            raise ProviderError("Provider completion response is missing its message.") from exc
+        except (KeyError, IndexError, TypeError):
+            pass
+        if not isinstance(message, Mapping):
+            raise ProviderError("Provider completion response is missing its message.")
         calls: list[ToolCall] = []
         for item in message.get("tool_calls", []) or []:
             try:
@@ -414,9 +424,12 @@ class OpenAICompatibleProvider:
                 arguments = json.loads(function.get("arguments") or "{}")
                 if not isinstance(arguments, dict):
                     raise ValueError
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+                pass
+            else:
                 calls.append(ToolCall(str(item["id"]), str(function["name"]), arguments))
-            except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
-                raise ProviderError("Provider returned a malformed tool call.") from exc
+                continue
+            raise ProviderError("Provider returned a malformed tool call.")
         content = message.get("content") or ""
         if not isinstance(content, str):
             raise ProviderError("Provider message content is invalid.")

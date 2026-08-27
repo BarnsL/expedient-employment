@@ -112,6 +112,52 @@ test('manager passes the supplied provider environment only to its owned child',
   await manager.stop();
 });
 
+test('manager strips ambient provider values when provider environment is omitted', async () => {
+  let captured = null;
+  const child = new EventEmitter();
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.kill = () => process.nextTick(() => child.emit('exit', 0));
+  const environment = {
+    EXPEDIENT_PROVIDER_URL: 'http://public.example/v1',
+    EXPEDIENT_PROVIDER_KEY_ENV: 'AMBIENT_PROVIDER_ACCESS_KEY',
+    FREECHAIN_ACCESS_KEY: 'synthetic-fixed-ambient-key',
+    AMBIENT_PROVIDER_ACCESS_KEY: 'synthetic-selected-ambient-key',
+    UNRELATED_AMBIENT_SETTING: 'preserved',
+  };
+  const originalEnvironment = { ...environment };
+  const manager = new ControlServiceManager({
+    environment,
+    spawnImpl: (_command, _args, options) => {
+      captured = options.env;
+      process.nextTick(() => {
+        child.stdout.write('{"event":"expedient_control_ready","host":"127.0.0.1","port":32127}\n');
+      });
+      return child;
+    },
+  });
+
+  const status = await manager.start({
+    pythonExecutable: 'python-test',
+    projectRoot: 'C:\\app\\pipeline',
+    dataRoot: 'C:\\app\\data',
+    nodeExecutable: 'C:\\app\\electron.exe',
+  });
+
+  for (const name of [
+    'EXPEDIENT_PROVIDER_URL',
+    'EXPEDIENT_PROVIDER_KEY_ENV',
+    'FREECHAIN_ACCESS_KEY',
+    'AMBIENT_PROVIDER_ACCESS_KEY',
+  ]) {
+    assert.equal(Object.hasOwn(captured, name), false);
+  }
+  assert.equal(captured.UNRELATED_AMBIENT_SETTING, 'preserved');
+  assert.deepEqual(environment, originalEnvironment);
+  assert.equal(JSON.stringify(status).includes('synthetic-selected-ambient-key'), false);
+  await manager.stop();
+});
+
 test('manager rejects malformed provider environments before spawning', async () => {
   let spawnCount = 0;
   const manager = new ControlServiceManager({

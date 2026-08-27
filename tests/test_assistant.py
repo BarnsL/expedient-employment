@@ -361,6 +361,59 @@ class AssistantTests(unittest.TestCase):
             ["POST http://127.0.0.1:4853/v1/chat/completions"],
         )
 
+    def test_openai_provider_safe_failures_drop_transport_exception_chains(self) -> None:
+        credential_env = "TEST_SAFE_CHAIN_ACCESS_KEY"
+        credential = "synthetic-provider-key"
+        raw_detail = "synthetic raw transport detail"
+
+        def failing_transport(*_args):
+            outer = ProviderError(f"transport failed with {credential}")
+            outer.__cause__ = RuntimeError(raw_detail)
+            raise outer
+
+        def chain_text(error: BaseException) -> str:
+            pending = [error]
+            seen: set[int] = set()
+            values: list[str] = []
+            while pending:
+                current = pending.pop()
+                if id(current) in seen:
+                    continue
+                seen.add(id(current))
+                values.append(str(current))
+                if current.__cause__ is not None:
+                    pending.append(current.__cause__)
+                if current.__context__ is not None:
+                    pending.append(current.__context__)
+            return " | ".join(values)
+
+        def provider():
+            return OpenAICompatibleProvider(
+                "FreeChain",
+                "http://127.0.0.1:4853/v1",
+                credential_env=credential_env,
+                transport=failing_transport,
+            )
+
+        request = AssistantRequest(
+            model="model-a",
+            messages=({"role": "user", "content": "hello"},),
+            tools=(),
+        )
+        with patch.dict(os.environ, {credential_env: credential}, clear=False):
+            readiness = provider().readiness()
+            self.assertFalse(readiness["ready"])
+            self.assertNotIn(credential, str(readiness))
+            self.assertNotIn(raw_detail, str(readiness))
+
+            for operation in (lambda: provider().models(), lambda: provider().complete(request)):
+                with self.subTest(operation=operation), self.assertRaises(ProviderError) as raised:
+                    operation()
+                self.assertIsNone(raised.exception.__cause__)
+                self.assertIsNone(raised.exception.__context__)
+                self.assertNotIn(credential, chain_text(raised.exception))
+                self.assertNotIn(raw_detail, chain_text(raised.exception))
+
     def test_openai_provider_rejects_plaintext_remote_base_url(self) -> None:
         with self.assertRaises(ProviderError):
             OpenAICompatibleProvider("unsafe", "http://public.example/v1", credential_env="KEY")

@@ -11,6 +11,7 @@ const RESPONSE_CAP_BYTES = 2 * 1024 * 1024;
 const MAX_PROVIDER_CREDENTIAL_BYTES = 64 * 1024;
 const PROVIDER_URL_KEY = 'EXPEDIENT_PROVIDER_URL';
 const PROVIDER_KEY_ENV_KEY = 'EXPEDIENT_PROVIDER_KEY_ENV';
+const PROVIDER_ENV_NAME_PATTERN = /^[A-Z][A-Z0-9_]{0,71}$/;
 const MANAGED_CHILD_ENV = new Set([
   'PYTHONPATH',
   'PYTHONDONTWRITEBYTECODE',
@@ -31,7 +32,7 @@ function validateProviderEnv(value) {
   const credentialEnv = value[PROVIDER_KEY_ENV_KEY];
   if (
     typeof credentialEnv !== 'string'
-    || !/^[A-Z][A-Z0-9_]{0,71}$/.test(credentialEnv)
+    || !PROVIDER_ENV_NAME_PATTERN.test(credentialEnv)
     || MANAGED_CHILD_ENV.has(credentialEnv)
   ) {
     throw new Error('Invalid provider environment.');
@@ -81,6 +82,24 @@ function validateProviderEnv(value) {
     [PROVIDER_KEY_ENV_KEY]: credentialEnv,
     [credentialEnv]: credential,
   };
+}
+
+function sanitizedChildEnvironment(environment) {
+  const sanitized = { ...environment };
+  const inheritedCredentialEnv = sanitized[PROVIDER_KEY_ENV_KEY];
+  const providerKeys = new Set([
+    PROVIDER_URL_KEY,
+    PROVIDER_KEY_ENV_KEY,
+    'FREECHAIN_ACCESS_KEY',
+  ]);
+  if (
+    typeof inheritedCredentialEnv === 'string'
+    && PROVIDER_ENV_NAME_PATTERN.test(inheritedCredentialEnv)
+  ) {
+    providerKeys.add(inheritedCredentialEnv);
+  }
+  for (const key of providerKeys) delete sanitized[key];
+  return sanitized;
 }
 
 function validateControlPath(value) {
@@ -149,10 +168,12 @@ class ControlServiceManager {
     spawnImpl = spawn,
     requestImpl = requestJson,
     stopTimeoutMs = STOP_TIMEOUT_MS,
+    environment = process.env,
   } = {}) {
     this.spawnImpl = spawnImpl;
     this.requestImpl = requestImpl;
     this.stopTimeoutMs = stopTimeoutMs;
+    this.environment = environment;
     this.child = null;
     this.port = 0;
     this.token = '';
@@ -204,13 +225,13 @@ class ControlServiceManager {
         path.join(projectRoot, 'python-runtime'),
       ].join(path.delimiter);
       const env = {
-        ...process.env,
+        ...sanitizedChildEnvironment(this.environment),
         PYTHONPATH: pythonPath,
         PYTHONDONTWRITEBYTECODE: '1',
         EXPEDIENT_CONTROL_TOKEN: token,
         EXPEDIENT_DATA_DIR: dataRoot,
         ONLY_CLI_NODE: nodeExecutable,
-        ELECTRON_RUN_AS_NODE: nodeExecutable === process.execPath ? '1' : process.env.ELECTRON_RUN_AS_NODE,
+        ELECTRON_RUN_AS_NODE: nodeExecutable === process.execPath ? '1' : this.environment.ELECTRON_RUN_AS_NODE,
         ...validatedProviderEnv,
       };
       const child = this.spawnImpl(
