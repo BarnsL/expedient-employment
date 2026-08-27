@@ -100,3 +100,24 @@ Steps:
 5. Install the rebuilt app, confirm the Start Menu shortcut, send a synthetic chat, close the app, relaunch it, and send a second synthetic chat.
 6. Confirm the encrypted credential artifact contains no plaintext and the assistant database/transcript contains no key.
 7. Merge the verified branch to `main` without rewriting history, push `main`, create signed release notes and tag `v2.0.0`, upload both assets and checksums, then verify the public tag, release, hashes, and repository privacy scan.
+
+## Task 7: Remediate release supply-chain blockers
+
+Files:
+
+- Modify `package.json`
+- Create `package-lock.json`
+- Modify `pyproject.toml`
+- Modify `gui/electron-builder.yml`
+- Create `tests/test_release_packaging.py`
+- Modify `docs/SECURITY.md`
+- Modify `docs/RELEASE-2.0.0.md`
+
+Steps:
+
+1. Update the root optional control-plane tools to current reviewed versions and create a reproducible root lockfile.
+2. Require the latest compatible browser-use patch and re-audit the optional Python dependency surfaces.
+3. Exclude internal implementation plans, dependency tests, source maps, and dependency-owned workflow files from release payloads.
+4. Add a regression test for the packaging exclusions.
+5. Run root, GUI, only-cli, core Python, and optional Python audits and document any upstream residual that cannot be fixed compatibly.
+6. Run the full affected tests and rebuild both release artifacts from the remediated commit.

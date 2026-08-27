@@ -22,7 +22,7 @@ dependencies = [
 
 [project.optional-dependencies]
 jobspy = ["python-jobspy==1.1.82"]
-browser-use = ["browser-use[core]==0.13.6; python_version >= '3.11'"]
+browser-use = ["browser-use[core]==0.13.8; python_version >= '3.11'"]
 
 [project.scripts]
 ai-job-pipeline = "job_pipeline.cli:main"

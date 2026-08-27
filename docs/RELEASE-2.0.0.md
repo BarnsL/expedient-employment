@@ -48,3 +48,13 @@ Committed evidence covers unit, React, Electron, lint, and production-build chec
 
 The Windows package includes the pinned Python timezone fallback required for named daily schedules on systems without an IANA timezone database.
 Scheduler storage is synchronized across the loopback service's concurrent request threads.
+
+## Dependency and payload status
+
+The locked GUI and only-cli trees each audit at zero known vulnerabilities, and the default core Python project audits at zero. The locked root development tree contains six known vulnerabilities, five moderate and one high, in the Paperclip Cursor adapter dependency chain. No compatible transitive update is available: the fixed `undici` major is outside the current `@connectrpc/connect-node` constraint, and the only automated npm proposal is a forced breaking Paperclip downgrade. The root development tools are not bundled in either Windows artifact, but this finding remains an explicit upstream concern.
+
+The optional browser-use pin is updated from 0.13.6 to 0.13.8. Its isolated metadata audit improves from 53 known vulnerabilities to six residual advisories across three transitive packages. The current `python-jobspy` 1.1.82 selection has one residual advisory in `markdownify` 0.13.1; the fix is 0.14.1, outside JobSpy's `<0.14.0` constraint. Both optional groups remain separately installed and are absent from the Windows payload.
+
+Packaged documentation excludes internal implementation plans. The bundled only-cli dependency tree excludes dependency-owned workflow files, test directories, and source maps while retaining package manifests, licenses, readmes, runtime JavaScript, and source entrypoints. License, third-party notice, provenance, only-cli runtime, and Windows timezone resources remain in both artifact payloads.
+
+The Windows installer is unsigned. The published SHA-256 checksums verify file integrity only and do not provide code-signing identity.

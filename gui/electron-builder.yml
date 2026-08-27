@@ -40,6 +40,7 @@ extraResources:
     to: pipeline/docs
     filter:
       - "**/*"
+      - "!superpowers/**"
   - from: ../README.md
     to: pipeline/README.md
   - from: ../LICENSE
@@ -50,6 +51,11 @@ extraResources:
     to: pipeline/only-cli-runtime/node_modules
     filter:
       - "**/*"
+      - "!**/.github/**"
+      - "!**/test/**"
+      - "!**/tests/**"
+      - "!**/__tests__/**"
+      - "!**/*.map"
   - from: ../python-runtime
     to: pipeline/python-runtime
     filter:

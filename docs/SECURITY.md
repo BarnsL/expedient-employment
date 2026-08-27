@@ -87,6 +87,16 @@ Packaged Python runs with bytecode writes disabled so installed resource directo
 
 Restricted-license product source is not copied into the application. Comparable capabilities are original implementations based only on public product requirements.
 
+### Dependency audit snapshot for 2026-08-26
+
+- The locked GUI tree and locked only-cli tree each report zero known vulnerabilities.
+- The default core Python project resolves one platform dependency and reports zero known vulnerabilities.
+- The locked root development tree pins `@openai/codex` 0.150.1 and `paperclipai` 2026.824.1. It reports six known vulnerabilities: five moderate and one high. The high finding is in `undici` 5.29.0 through Paperclip's Cursor adapter dependency chain. The current `@cursor/sdk` 1.0.29 requires `@connectrpc/connect-node` 1.x, which requires `undici` 5.x, while the audited fix requires `undici` 6.28.0 or newer. `npm audit fix` found no compatible update and offered only a forced breaking Paperclip downgrade, which was not applied. These root development tools are not bundled in the Windows payload, but the finding remains visible for upstream remediation.
+- Updating optional `browser-use[core]` from 0.13.6 to 0.13.8 reduces its resolved metadata audit from 53 known vulnerabilities to six across `click` 8.3.1, `mcp` 1.26.0, and `pypdf` 6.14.2. The residual advisory payload text is intentionally not reproduced here. This optional group is installed only into a separate user-requested runtime and is not bundled in the Windows payload.
+- `python-jobspy` 1.1.82 remains the current selected release. Its isolated metadata audit reports one advisory in transitive `markdownify` 0.13.1. The audited fix is 0.14.1, but JobSpy requires `markdownify>=0.13.1,<0.14.0`. JobSpy is also optional, isolated, and not bundled in the Windows payload.
+
+The Windows installer is currently unsigned. File checksums provide integrity evidence, not publisher identity or code-signing assurance.
+
 ## Reporting a vulnerability
 
 Use the repository's private security reporting channel when available. Do not attach real resumes, credentials, session exports, or application packets to a public issue.

@@ -5,7 +5,7 @@
   "license": "MIT",
   "description": "Pinned optional control plane for Expedient Employment agents and approval-gated browser workflows.",
   "devDependencies": {
-    "@openai/codex": "0.144.6",
-    "paperclipai": "2026.707.0"
+    "@openai/codex": "0.150.1",
+    "paperclipai": "2026.824.1"
   }
 }
