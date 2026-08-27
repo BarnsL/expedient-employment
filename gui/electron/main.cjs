@@ -1,5 +1,12 @@
 // Expedient Employment — Electron main process
-const { app, BrowserWindow, ipcMain, session, shell } = require('electron');
+const {
+  app,
+  BrowserWindow,
+  ipcMain,
+  safeStorage,
+  session,
+  shell,
+} = require('electron');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
@@ -13,6 +20,7 @@ const {
   ControlServiceManager,
   packagedPipelineRoot,
 } = require('./control-service.cjs');
+const { ProviderCredentialStore } = require('./provider-credential-store.cjs');
 
 const PIPELINE_ROOT = app.isPackaged
   ? packagedPipelineRoot(process.resourcesPath)
@@ -21,6 +29,7 @@ const GUI_ROOT = path.resolve(__dirname, '..');
 
 let mainWindow = null;
 const controlService = new ControlServiceManager();
+let providerCredentialStore = null;
 // child processes spawned by this app instance (killed on quit)
 const spawnedChildren = new Set();
 
@@ -72,6 +81,14 @@ function createWindow() {
 
 app.setAppUserModelId('com.expedient.employment');
 app.whenReady().then(() => {
+  providerCredentialStore = new ProviderCredentialStore({
+    userDataPath: app.getPath('userData'),
+    safeStorage,
+    environment: process.env,
+  });
+  if (!providerCredentialStore.credential()) {
+    providerCredentialStore.importFromEnvironment();
+  }
   session.defaultSession.setPermissionRequestHandler(
     (_webContents, _permission, callback) => callback(false),
   );
@@ -159,12 +176,35 @@ function resolvePython() {
 async function ensureControlService() {
   const status = controlService.status();
   if (status.ready) return status;
+  const credential = providerCredentialStore ? providerCredentialStore.credential() : null;
   return controlService.start({
     pythonExecutable: resolvePython(),
     projectRoot: PIPELINE_ROOT,
     dataRoot: path.join(app.getPath('userData'), 'control'),
     nodeExecutable: process.execPath,
+    providerEnv: {
+      EXPEDIENT_PROVIDER_URL: 'http://127.0.0.1:4853/v1',
+      EXPEDIENT_PROVIDER_KEY_ENV: 'FREECHAIN_ACCESS_KEY',
+      FREECHAIN_ACCESS_KEY: credential || '',
+    },
   });
+}
+
+function providerCredentialStatus() {
+  if (!providerCredentialStore) {
+    return { configured: false, saved: false, source: 'unavailable' };
+  }
+  const status = providerCredentialStore.status();
+  return {
+    configured: status.available,
+    saved: providerCredentialStore.saved(),
+    source: status.source,
+  };
+}
+
+async function restartOwnedControlService() {
+  controlService.stop();
+  try { await ensureControlService(); } catch { /* status stays credential-only */ }
 }
 
 async function controlRequest(method, requestPath, payload) {
@@ -611,6 +651,17 @@ ipcMain.handle('control:status', async () => {
   } catch (err) {
     return { ready: false, port: null, error: String(err.message || err) };
   }
+});
+ipcMain.handle('provider-credential:status', () => providerCredentialStatus());
+ipcMain.handle('provider-credential:reimport', async () => {
+  if (providerCredentialStore) providerCredentialStore.reimportFromEnvironment();
+  await restartOwnedControlService();
+  return providerCredentialStatus();
+});
+ipcMain.handle('provider-credential:clear', async () => {
+  if (providerCredentialStore) providerCredentialStore.clear();
+  await restartOwnedControlService();
+  return providerCredentialStatus();
 });
 ipcMain.handle('assistant:providers', () => controlRequest('GET', '/v1/providers'));
 ipcMain.handle('assistant:models', (_event, provider) => (
