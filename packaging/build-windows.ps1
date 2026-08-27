@@ -37,6 +37,9 @@ try {
         & npm install
         if ($LASTEXITCODE -ne 0) { throw 'npm install failed in gui/.' }
     }
+    Write-Host 'Installing pinned only-cli runtime without optional fingerprint transport...'
+    & npm run only-cli:install
+    if ($LASTEXITCODE -ne 0) { throw 'only-cli runtime install failed.' }
     Write-Host 'Building the GUI (npm run build)...'
     & npm run build
     if ($LASTEXITCODE -ne 0) { throw 'GUI build failed.' }

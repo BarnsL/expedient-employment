@@ -59,6 +59,34 @@ The Expedient access guard remains authoritative after the port. Board
 timeouts from the upstream project and the local HTTP and human-check
 classification are both covered by regression tests.
 
+## only-cli
+
+- Repository: <https://github.com/only-cli/oc>
+- Reviewed revision: `7f1f109b8e34dcfc2bfb56122a427f3c467a79ca`
+- Package version: `0.5.0`
+- License: MIT
+- Integration method: Git-revision-pinned production runtime under
+  `gui/only-cli-runtime`, invoked by the typed Python adapter at
+  `job_pipeline/integrations/only_cli.py`.
+
+The shipped runtime is installed with npm optional dependencies omitted. This
+preserves only-cli's implemented read, navigation, site-shortcut, and session
+features while excluding its optional browser-fingerprint transport. The
+adapter exposes only implemented commands, rejects planned form commands,
+keeps state in an application-owned directory, passes login cookies on stdin,
+caps output and time, and converts access challenges into an explicit browser
+handoff status.
+
+Verification on Windows at integration time:
+
+- Shipped adapter and broker suites: 12 of 12 passing.
+- Full Expedient Python suite after integration: 105 of 105 passing.
+- Live adapter smoke checks: site catalog and public-page open both exited 0.
+- Upstream only-cli suite: 168 of 183 passing. The 15 upstream failures are
+  confined to its POSIX-root test-path construction (`C:\C:\...`) and POSIX
+  permission-bit assertions on Windows. The shipped adapter does not use
+  those path builders, and its Windows process path is covered directly.
+
 ## Restricted-license references
 
 No source, tests, assets, prompts, schemas, or implementation structure from

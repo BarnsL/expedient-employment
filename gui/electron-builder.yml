@@ -46,6 +46,10 @@ extraResources:
     to: pipeline/LICENSE
   - from: ../THIRD_PARTY_NOTICES.md
     to: pipeline/THIRD_PARTY_NOTICES.md
+  - from: only-cli-runtime/node_modules
+    to: pipeline/only-cli-runtime/node_modules
+    filter:
+      - "**/*"
 
 # Windows: portable zip plus an unpacked dir that installer/windows.iss turns
 # into the Inno Setup installer. No NSIS target on purpose.

@@ -8,6 +8,19 @@ licensed source from AI Job Search Pipeline at reviewed revision
 - License: MIT
 - Detailed file ledger: `docs/PROVENANCE.md`
 
+The assistant web tool surface includes a separately installed, Git-pinned
+only-cli runtime:
+
+- Project: https://github.com/only-cli/oc
+- Reviewed revision: `7f1f109b8e34dcfc2bfb56122a427f3c467a79ca`
+- Package version: `0.5.0`
+- License: MIT
+- Installed location: `gui/only-cli-runtime/node_modules/`
+
+Its optional native fingerprint-impersonation transport is omitted from the
+installed and packaged runtime. The Node native transport remains available,
+including only-cli's public-page safety checks and challenge detection.
+
 This project integrates with, but does not vendor or modify, WebClaw:
 
 - Project: https://github.com/0xMassi/webclaw
