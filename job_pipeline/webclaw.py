@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from .util import redact_secrets
+from .web_intelligence import SafeUrlPolicy, UnsafeUrlError
 
 
 LOGGER = logging.getLogger(__name__)
@@ -25,7 +26,13 @@ class WebClawError(RuntimeError):
 
 class WebClawClient:
     """Invoke WebClaw and validate its machine-readable JSON boundaries."""
-    def __init__(self, project_root: Path, binary: str | None = None, timeout: int = 60):
+    def __init__(
+        self,
+        project_root: Path,
+        binary: str | None = None,
+        timeout: int = 60,
+        url_policy: SafeUrlPolicy | None = None,
+    ):
         """Resolve the executable once and retain a default request timeout."""
         self.project_root = project_root
         try:
@@ -34,6 +41,14 @@ class WebClawClient:
             pass
         self.timeout = max(5, min(timeout, 120))
         self.binary = self._resolve_binary(binary)
+        self.url_policy = url_policy or SafeUrlPolicy()
+
+    def _validate_page_url(self, url: str) -> None:
+        """Reject local and non-public page targets before any network adapter sees them."""
+        try:
+            self.url_policy.resolve(url)
+        except (UnsafeUrlError, OSError) as exc:
+            raise WebClawError("Page URL must resolve only to public addresses.") from exc
 
     def _resolve_binary(self, explicit: str | None) -> str:
         """Find WebClaw from an explicit flag, environment, local tools, or PATH."""
@@ -108,7 +123,7 @@ class WebClawClient:
                 method="POST",
             )
             try:
-                with urllib.request.urlopen(request, timeout=45) as response:
+                with urllib.request.urlopen(request, timeout=45) as response:  # nosec B310
                     raw = response.read().decode("utf-8", errors="replace")
             except urllib.error.HTTPError as exc:
                 detail = exc.read(1024).decode("utf-8", errors="replace")
@@ -126,6 +141,7 @@ class WebClawClient:
 
     def scrape(self, url: str) -> dict[str, Any]:
         """Extract one public page into WebClaw's JSON metadata/content structure."""
+        self._validate_page_url(url)
         tavily_key = os.environ.get("TAVILY_API_KEY", "").strip()
         if tavily_key:
             request = urllib.request.Request(
@@ -135,7 +151,7 @@ class WebClawClient:
                 method="POST",
             )
             try:
-                with urllib.request.urlopen(request, timeout=min(self.timeout, 45)) as response:
+                with urllib.request.urlopen(request, timeout=min(self.timeout, 45)) as response:  # nosec B310
                     payload = json.loads(response.read().decode("utf-8", errors="replace"))
             except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
                 raise WebClawError(f"Tavily extraction failed for {url}: {exc}") from exc
@@ -161,6 +177,7 @@ class WebClawClient:
         the employer closes the requisition. This lightweight second channel makes
         redirect-to-index and explicit expiry responses visible to the verifier.
         """
+        self._validate_page_url(url)
         request = urllib.request.Request(
             url,
             headers={
@@ -173,7 +190,7 @@ class WebClawClient:
         )
         limit = max(1, min(int(max_bytes), 1_048_576))
         try:
-            with urllib.request.urlopen(request, timeout=min(self.timeout, 30)) as response:
+            with urllib.request.urlopen(request, timeout=min(self.timeout, 30)) as response:  # nosec B310
                 body = response.read(limit)
                 return {
                     "requested_url": url,

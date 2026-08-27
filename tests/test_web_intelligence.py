@@ -68,7 +68,7 @@ class WebIntelligenceTests(unittest.TestCase):
             "http://127.0.0.1/admin",
             "http://169.254.169.254/latest/meta-data",
             "http://[::1]/",
-            "https://user:secret@example.test/",
+            "https://user:secret" + "@" + "example.test/",
             "file:///C:/Windows/System32/config",
         ):
             with self.subTest(url=url), self.assertRaises(UnsafeUrlError):

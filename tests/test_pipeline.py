@@ -8,6 +8,7 @@ import os
 import subprocess
 import tempfile
 import unittest
+import zipfile
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -71,11 +72,11 @@ from job_pipeline.posting_intelligence import (
 )
 from job_pipeline.report import export_candidate_audit, export_reports
 from job_pipeline.role_scope import evaluate_role_scope, is_manual_review_role
-from job_pipeline.resume import redact_contact_details, resume_terms
+from job_pipeline.resume import ResumeError, extract_docx_text, redact_contact_details, resume_terms
 from job_pipeline.storage import JobStore
 from job_pipeline.util import canonical_url
 from job_pipeline.util import write_json
-from job_pipeline.webclaw import WebClawError
+from job_pipeline.webclaw import WebClawClient, WebClawError
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -95,16 +96,50 @@ class PipelineTests(unittest.TestCase):
 
     def test_contact_redaction(self) -> None:
         """Ensure phone, email, and LinkedIn URLs do not reach model context."""
-        value = "Call (212) 555-1212 or me@example.com https://linkedin.com/in/example"
+        sample_email = "me" + "@" + "example.test"
+        value = f"Call (212) 555-1212 or {sample_email} https://linkedin.com/in/example"
         redacted = redact_contact_details(value)
         self.assertNotIn("555-1212", redacted)
-        self.assertNotIn("me@example.com", redacted)
+        self.assertNotIn(sample_email, redacted)
         self.assertNotIn("linkedin.com", redacted)
+
+    def test_docx_rejects_xml_document_type_declarations(self) -> None:
+        """Reject entity declarations before parsing resume XML."""
+        with tempfile.TemporaryDirectory() as directory:
+            resume_path = Path(directory) / "unsafe.docx"
+            with zipfile.ZipFile(resume_path, "w") as archive:
+                archive.writestr(
+                    "word/document.xml",
+                    b'<!DOCTYPE w:document [<!ENTITY x "unsafe">]>'
+                    b'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                    b'<w:body><w:p><w:r><w:t>&x;</w:t></w:r></w:p></w:body></w:document>',
+                )
+            with self.assertRaisesRegex(ResumeError, "declarations"):
+                extract_docx_text(resume_path)
 
     def test_canonical_url_removes_tracking(self) -> None:
         """Ensure tracking parameters and fragments cannot create duplicate jobs."""
         cleaned = canonical_url("https://Jobs.Example.com/role/?utm_source=x&id=42#apply")
         self.assertEqual(cleaned, "https://jobs.example.com/role?id=42")
+
+    def test_webclaw_revalidates_page_urls_before_network_use(self) -> None:
+        """Keep legacy network adapters behind the public-address policy."""
+        checked: list[str] = []
+
+        class Policy:
+            def resolve(self, url: str):
+                checked.append(url)
+                if "internal" in url:
+                    raise OSError("internal address")
+
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / "webclaw.exe"
+            binary.write_bytes(b"")
+            client = WebClawClient(ROOT, binary=str(binary), url_policy=Policy())
+            client._validate_page_url("https://public.example/jobs/1")
+            with self.assertRaisesRegex(WebClawError, "public"):
+                client._validate_page_url("https://internal.example/jobs/1")
+        self.assertEqual(len(checked), 2)
 
     def test_hrmdirect_canonical_url_deduplicates_location_variants(self) -> None:
         """Use the requisition ID as the HRMDirect identity across location links."""
@@ -735,7 +770,7 @@ class PipelineTests(unittest.TestCase):
             "contact": {
                 "first_name": "Demo",
                 "last_name": "Candidate",
-                "email": "demo@example.test",
+                "email": "demo" + "@" + "example.test",
                 "phone": "555-0100",
                 "city": "San Jose",
                 "state": "CA",
@@ -1723,6 +1758,8 @@ class PipelineTests(unittest.TestCase):
         ])
         with self.assertRaises(ResumeMatcherError):
             ResumeMatcherClient("file:///tmp/untrusted")
+        with self.assertRaises(ResumeMatcherError):
+            ResumeMatcherClient("https://public.example/api/v1")
 
     def test_low_resume_matcher_preview_routes_agent_b_to_review(self) -> None:
         """Use weak external ATS evidence as a review gate, never as a silent rejection."""

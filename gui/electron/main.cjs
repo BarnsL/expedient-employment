@@ -1,10 +1,11 @@
 // Expedient Employment — Electron main process
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, session, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const { spawn } = require('child_process');
 const {
+  isAllowedWebviewUrl,
   validateApplicationIdentity,
   validateApplicationMutation,
 } = require('./safety.cjs');
@@ -47,8 +48,17 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
       webviewTag: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      navigateOnDragDrop: false,
     },
+  });
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (isAllowedWebviewUrl(url)) void shell.openExternal(url);
+    return { action: 'deny' };
   });
 
   mainWindow.on('closed', () => { mainWindow = null; });
@@ -62,6 +72,28 @@ function createWindow() {
 
 app.setAppUserModelId('com.expedient.employment');
 app.whenReady().then(() => {
+  session.defaultSession.setPermissionRequestHandler(
+    (_webContents, _permission, callback) => callback(false),
+  );
+  app.on('web-contents-created', (_event, contents) => {
+    contents.on('will-attach-webview', (attachEvent, webPreferences, params) => {
+      delete webPreferences.preload;
+      webPreferences.nodeIntegration = false;
+      webPreferences.contextIsolation = true;
+      webPreferences.sandbox = true;
+      webPreferences.webSecurity = true;
+      if (!isAllowedWebviewUrl(params.src)) attachEvent.preventDefault();
+    });
+    if (contents.getType() === 'webview') {
+      contents.on('will-navigate', (navigateEvent, url) => {
+        if (!isAllowedWebviewUrl(url)) navigateEvent.preventDefault();
+      });
+      contents.setWindowOpenHandler(({ url }) => {
+        if (isAllowedWebviewUrl(url)) void shell.openExternal(url);
+        return { action: 'deny' };
+      });
+    }
+  });
   // best-effort, non-blocking backend auto-launch (never blocks window creation)
   void startPaperclip().catch(() => {});
   void startResumeMatcher().catch(() => {});

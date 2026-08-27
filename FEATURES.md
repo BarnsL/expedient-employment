@@ -1,4 +1,4 @@
-# Expedient Employment — Feature List
+# Expedient Employment Feature List
 
 A complete inventory of what the application does. For install instructions see [README.md](README.md); for known limitations see [ISSUES.md](ISSUES.md).
 
@@ -63,9 +63,34 @@ Coordinated by [Paperclip](https://github.com/paperclipai/paperclip) (localhost,
 | **Settings** | JSON editors for `profile.json`, `searches.json`, `access_policy.json`, and `agent_web_browser.json` with validate-before-save and automatic `.bak` backups |
 | **Paperclip** | Embedded control-plane page with **Engine Start** button |
 | **Resume-Matcher** | Embedded Resume-Matcher page with **Engine Start** button |
+| **Assistant** | Durable provider-aware chat, message queue, edit/cancel/retry controls, local images, model discovery, and typed tool events |
+| **Automations** | Interval and daily schedules, enable/disable controls, due-run execution, history, and Windows background wake installation |
+| **Web Workbench** | Typed tool catalog, JSON workflow editor, dry-run validation, bounded execution, and structured results |
+| **Applications** | Application lifecycle dashboard, user outcome flags, undo, local draft packets, and report export |
 
 - Services auto-launch with the app on a best-effort basis (Paperclip via Node, Resume-Matcher via Docker) without blocking window creation.
 - Single-instance window; child processes spawned by the app are cleaned up on quit.
+- Chromium sandboxing and context isolation are enabled. Webview destinations, permissions, popups, and navigation are restricted centrally.
+
+## Assistant, tools, and scheduling
+
+- Durable SQLite-backed conversations, messages, queue state, retries, attachments, and tool events.
+- OpenAI-compatible provider adapter for HTTPS or fixed loopback services, with environment-owned credentials and bounded responses.
+- Content-addressed image storage with explicit per-message provider upload consent.
+- Typed tool broker with JSON Schema, read/local-write/external-draft/external-action policies, timeouts, cancellation, output caps, and content-free audit records.
+- Pinned MIT only-cli runtime exposing its implemented read and navigation surface to the assistant and workflow engine.
+- Validated workflow DAGs with exact result interpolation, dry run, retry, resume, cancellation, and circuit controls.
+- Persistent interval or timezone-aware daily schedules, leases, coalescing, enable/disable state, and run history.
+- Headless Windows wake task with limited privilege and overlap prevention.
+- Scheduled job-hunting and local draft preparation, with employer-facing actions excluded from scheduler authority.
+
+## Web intelligence
+
+- Public URL policy requiring HTTP(S), global DNS answers, and no URL credentials.
+- DNS peer pin verification and redirect revalidation to reduce SSRF and rebinding exposure.
+- Bounded response sizes, MIME types, crawl depth, link counts, cache state, and workflow results.
+- Explicit challenge and login-handoff signals with cooldown and circuit behavior.
+- No CAPTCHA bypass, fingerprint spoofing, credential replay, stealth timing, or concealed submission.
 
 ## Session persistence
 
@@ -90,7 +115,10 @@ Coordinated by [Paperclip](https://github.com/paperclipai/paperclip) (localhost,
 - `run.ps1 demo` — ranks three fictional fixture jobs with no network or keys.
 - `run.ps1 agent-demo` — offline three-agent contract test; asserts Agent C stops at `awaiting_review`.
 - `scripts/test-paperclip.ps1` — verifies health, three paused agents, sandbox settings, starter issues, and an optional authenticated Codex probe.
-- `python -m pytest tests -q` — unit tests covering redaction, URL canonicalization, JSON-LD normalization, ranking, SQLite, reports, and agent contracts.
+- `python -m unittest discover -s tests` runs the complete standard-library test suite.
+- `python -m job_pipeline.recruiting_acceptance --output reports/recruiting_acceptance.json` runs the deterministic multi-trial recruiting scale and privacy gate.
+- `npm --prefix gui test`, `npm --prefix gui run lint`, and `npm --prefix gui run build` verify the renderer.
+- `node --test gui/electron/*.test.cjs` verifies the Electron and control-service boundaries.
 
 ## Cross-platform support
 

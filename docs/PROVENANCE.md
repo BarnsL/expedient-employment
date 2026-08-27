@@ -80,7 +80,7 @@ handoff status.
 Verification on Windows at integration time:
 
 - Shipped adapter and broker suites: 12 of 12 passing.
-- Full Expedient Python suite after integration: 105 of 105 passing.
+- Full Expedient Python suite is rerun from the final release snapshot.
 - Live adapter smoke checks: site catalog and public-page open both exited 0.
 - Upstream only-cli suite: 168 of 183 passing. The 15 upstream failures are
   confined to its POSIX-root test-path construction (`C:\C:\...`) and POSIX
@@ -93,3 +93,21 @@ No source, tests, assets, prompts, schemas, or implementation structure from
 Wigolo or Maxun is incorporated. Their desired user-facing capabilities are
 implemented as original Expedient modules from the public product-level
 requirements recorded in the feature-fusion design specification.
+
+Original MIT modules created for those product-level capabilities:
+
+- `job_pipeline/tool_broker.py`
+- `job_pipeline/web_intelligence.py`
+- `job_pipeline/web_workflows.py`
+- `job_pipeline/assistant.py`
+- `job_pipeline/scheduler.py`
+- `job_pipeline/service.py`
+- `job_pipeline/app_tools.py`
+- `job_pipeline/recruiting_acceptance.py`
+- `gui/src/pages/Assistant.tsx`
+- `gui/src/pages/Automations.tsx`
+- `gui/src/pages/WebWorkbench.tsx`
+
+These modules use Expedient's own schemas, boundaries, state models, naming,
+tests, and implementation. Restricted repositories are not build inputs,
+package inputs, Git submodules, or runtime dependencies.

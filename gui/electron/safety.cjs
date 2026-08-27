@@ -143,6 +143,24 @@ function isAllowedSessionUrl(rawUrl, additionalDomains = []) {
   );
 }
 
+function isAllowedWebviewUrl(rawUrl) {
+  if (rawUrl === 'about:blank') return true;
+  let parsed;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return false;
+  }
+  if (
+    parsed.protocol === 'http:'
+    && new Set(['127.0.0.1', 'localhost']).has(parsed.hostname)
+    && new Set(['3000', '3100']).has(parsed.port)
+  ) {
+    return true;
+  }
+  return isAllowedSessionUrl(rawUrl);
+}
+
 function validateApplicationIdentity(value) {
   const identityKey = String(value || '').trim().toLowerCase();
   if (!/^[0-9a-f]{16}$/.test(identityKey)) {
@@ -168,6 +186,7 @@ module.exports = {
   buildPipelineSearchArgs,
   hostnameMatches,
   isAllowedSessionUrl,
+  isAllowedWebviewUrl,
   validateApplicationIdentity,
   validateApplicationMutation,
   validateSearchArgs,

@@ -45,7 +45,7 @@ class OnlyCliAdapterTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp.cleanup()
 
-    def adapter(self, runner=None, *, max_output_bytes=4096):
+    def adapter(self, runner=None, *, max_output_bytes=4096, url_validator=None):
         return OnlyCliAdapter(
             project_root=self.root,
             cli_entry=self.entry,
@@ -53,6 +53,7 @@ class OnlyCliAdapterTests(unittest.TestCase):
             session_dir=self.session_dir,
             runner=runner or RecordingRunner(),
             max_output_bytes=max_output_bytes,
+            url_validator=url_validator or (lambda _url: None),
         )
 
     def test_supported_commands_use_fixed_node_entry_and_owned_session_home(self) -> None:
@@ -86,6 +87,20 @@ class OnlyCliAdapterTests(unittest.TestCase):
         for command in ("fill", "submit", "back", "shell", "session"):
             with self.subTest(command=command), self.assertRaises(OnlyCliCommandError):
                 adapter.run(command, [])
+
+    def test_page_urls_pass_the_dns_aware_public_url_policy(self) -> None:
+        checked = []
+        adapter = self.adapter(url_validator=checked.append)
+        adapter.run("open", ["https://example.test/page"])
+        self.assertEqual(checked, ["https://example.test/page"])
+
+        def reject_internal(_url):
+            raise ValueError("internal target")
+
+        with self.assertRaisesRegex(OnlyCliCommandError, "public"):
+            self.adapter(url_validator=reject_internal).run(
+                "raw", ["https://internal.example.test/page"]
+            )
 
     def test_login_reads_cookie_from_stdin_and_never_process_arguments(self) -> None:
         runner = RecordingRunner()

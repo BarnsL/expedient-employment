@@ -293,7 +293,7 @@ Run:
 npm --prefix gui test -- --run
 npm --prefix gui run lint
 npm --prefix gui run build
-node C:\Users\Burgboy\.codex\skills\impeccable\scripts\detect.mjs --json gui/src/pages/Assistant.tsx gui/src/pages/Automations.tsx gui/src/pages/WebWorkbench.tsx gui/src/components/assistant
+node %USERPROFILE%\.codex\skills\impeccable\scripts\detect.mjs --json gui/src/pages/Assistant.tsx gui/src/pages/Automations.tsx gui/src/pages/WebWorkbench.tsx gui/src/components/assistant
 python -m unittest discover -s tests -v
 ```
 

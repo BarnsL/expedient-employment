@@ -21,21 +21,21 @@ Its optional native fingerprint-impersonation transport is omitted from the
 installed and packaged runtime. The Node native transport remains available,
 including only-cli's public-page safety checks and challenge detection.
 
-This project integrates with, but does not vendor or modify, WebClaw:
+This project can integrate with, but does not vendor, package, or modify, WebClaw:
 
 - Project: https://github.com/0xMassi/webclaw
 - License: GNU Affero General Public License v3.0 (AGPL-3.0)
 - Reference commit used during implementation: `81e4ac2e93d9b160d9e36e28d65b7f92fad3a331`
 - Release setup targets: the current GitHub `latest` release at install time
 
-WebClaw remains a separate executable. Review its license and the terms of any websites or API providers you use.
+WebClaw remains a separate user-installed executable outside the MIT application distribution. The original MIT web-intelligence and workflow modules do not depend on its source. Review its license and the terms of any websites or API providers you use.
 
 The optional local multi-agent control plane uses these pinned development dependencies:
 
 - Paperclip AI `2026.707.0`: https://github.com/paperclipai/paperclip (MIT License)
 - OpenAI Codex CLI `0.144.6`: https://github.com/openai/codex (Apache License 2.0)
 
-They are installed through pnpm into `node_modules/`; this repository does not commit their package contents.
+They are installed through pnpm into `node_modules/`; this repository does not commit or include their package contents in the desktop installer.
 
 The specialist adapters integrate with these separately installed or separately run projects:
 

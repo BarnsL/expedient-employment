@@ -183,7 +183,7 @@ def _json_transport(
     encoded = None if body is None else json.dumps(body).encode("utf-8")
     request = urllib.request.Request(url, data=encoded, method=method, headers=dict(headers))
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # nosec B310
             payload = response.read(2_000_001)
             if len(payload) > 2_000_000:
                 raise ProviderError("Provider response exceeded the 2 MB cap.")

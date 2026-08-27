@@ -8,7 +8,6 @@ on a process command line.
 
 from __future__ import annotations
 
-import ipaddress
 import os
 import re
 import shutil
@@ -20,6 +19,7 @@ from urllib.parse import urlsplit
 
 from ..tool_broker import ToolContext, ToolPolicy, ToolResult, ToolSpec
 from ..util import redact_secrets
+from ..web_intelligence import SafeUrlPolicy, UnsafeUrlError
 
 
 SUPPORTED_COMMANDS = frozenset(
@@ -103,6 +103,7 @@ class OnlyCliResult:
 
 
 Runner = Callable[..., subprocess.CompletedProcess[str]]
+UrlValidator = Callable[[str], object]
 
 
 def _default_session_dir() -> Path:
@@ -155,21 +156,16 @@ def _validate_argument(value: str) -> str:
     return text
 
 
-def _validate_public_url(raw_url: str) -> None:
+def _validate_public_url(raw_url: str, validator: UrlValidator) -> None:
     parsed = urlsplit(raw_url)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         raise OnlyCliCommandError("only-cli accepts HTTP or HTTPS page URLs only.")
     if parsed.username or parsed.password:
         raise OnlyCliCommandError("URL user information is not allowed.")
-    host = parsed.hostname.casefold().rstrip(".")
-    if host == "localhost" or host.endswith(".localhost"):
-        raise OnlyCliCommandError("Private or internal page URLs are not allowed.")
     try:
-        address = ipaddress.ip_address(host)
-    except ValueError:
-        return
-    if not address.is_global:
-        raise OnlyCliCommandError("Private or internal page URLs are not allowed.")
+        validator(raw_url)
+    except (UnsafeUrlError, ValueError, OSError) as exc:
+        raise OnlyCliCommandError("only-cli page URLs must resolve to public addresses.") from exc
 
 
 class OnlyCliAdapter:
@@ -185,6 +181,7 @@ class OnlyCliAdapter:
         session_name: str = "expedient",
         runner: Runner | None = None,
         max_output_bytes: int = 524_288,
+        url_validator: UrlValidator | None = None,
     ):
         self.project_root = Path(project_root).resolve()
         self.cli_entry = _resolve_entry(self.project_root, cli_entry)
@@ -195,6 +192,7 @@ class OnlyCliAdapter:
         self.session_name = session_name
         self.runner = runner or subprocess.run
         self.max_output_bytes = max(1, int(max_output_bytes))
+        self.url_validator = url_validator or SafeUrlPolicy().resolve
 
     def available(self) -> bool:
         """Return whether the pinned JavaScript entry is available to execute."""
@@ -213,7 +211,7 @@ class OnlyCliAdapter:
         if command in {"open", "raw"} and actual_arguments:
             candidate = actual_arguments[0]
             if candidate.startswith(("http://", "https://")):
-                _validate_public_url(candidate)
+                _validate_public_url(candidate, self.url_validator)
         return [
             str(self.node_binary),
             str(self.cli_entry),

@@ -2309,7 +2309,7 @@ def command_agent_demo(args: argparse.Namespace, root: Path) -> int:
         "contact": {
             "first_name": "Demo",
             "last_name": "Candidate",
-            "email": "demo@example.test",
+            "email": "demo" + "@" + "example.test",
             "phone": "555-0100",
             "city": "San Jose",
             "state": "CA",

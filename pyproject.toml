@@ -1,7 +1,7 @@
 [project]
-name = "ai-job-search-pipeline"
-version = "1.4.0"
-description = "A private, Paperclip-orchestrated job discovery, verification, matching, and approval-gated application pipeline."
+name = "expedient-employment"
+version = "2.0.0"
+description = "A local-first job discovery, verification, drafting, scheduling, and tool-using assistant application."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
