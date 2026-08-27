@@ -11,6 +11,8 @@ Each schedule stores its workflow, next due time, enabled state, lease state, an
 
 The service serializes scheduler database transactions so simultaneous loopback requests cannot share an SQLite connection unsafely.
 
+On Windows, the hidden wake invokes Python with bytecode writes disabled. The scheduler CLI prepends the packaged timezone runtime before loading services, so named daily recurrences work even when the host Python installation has no IANA timezone package.
+
 ## Default scheduled job hunt
 
 The Automations page can create a recurring recruiting workflow with a bounded pipeline request. The default asks for up to 250 recruiting results and stores its pipeline artifacts locally. It does not apply to jobs.

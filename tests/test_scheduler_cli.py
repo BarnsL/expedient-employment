@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -107,6 +109,33 @@ $global:Captured | ConvertTo-Json -Compress
                 captured["Argument"].startswith("-B -m job_pipeline.scheduler_cli "),
                 captured["Argument"],
             )
+
+    def test_scheduler_cli_bootstraps_bundled_timezone_data(self) -> None:
+        """Let standalone scheduled wakes validate named daily timezones on Windows."""
+        environment = os.environ.copy()
+        environment.pop("PYTHONPATH", None)
+        environment["PYTHONDONTWRITEBYTECODE"] = "1"
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-B",
+                "-c",
+                (
+                    "import job_pipeline.scheduler_cli; "
+                    "from job_pipeline.scheduler import Recurrence; "
+                    "Recurrence.daily('09:30', 'America/Los_Angeles').validate(); "
+                    "print('timezone-ready')"
+                ),
+            ],
+            cwd=ROOT,
+            env=environment,
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(completed.stdout.strip(), "timezone-ready")
 
 
 if __name__ == "__main__":

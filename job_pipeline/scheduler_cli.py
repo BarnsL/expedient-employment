@@ -3,8 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+# The scheduled task starts Python directly, outside Electron's PYTHONPATH.
+# Prepend the packaged runtime so named ZoneInfo recurrences work on Windows.
+_BUNDLED_RUNTIME = Path(__file__).resolve().parent.parent / "python-runtime"
+if _BUNDLED_RUNTIME.is_dir() and str(_BUNDLED_RUNTIME) not in sys.path:
+    sys.path.insert(0, str(_BUNDLED_RUNTIME))
 
 from .service import build_default_runtime
 
