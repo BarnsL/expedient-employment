@@ -20,6 +20,20 @@ $ErrorActionPreference = 'Stop'
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $GuiDir = Join-Path $RepoRoot 'gui'
 $ReleaseDir = Join-Path $RepoRoot 'release'
+$StagingRoot = Join-Path ([IO.Path]::GetTempPath()) 'expedient-employment-builder'
+
+if (Test-Path -LiteralPath $StagingRoot) {
+    $resolvedStageRoot = (Resolve-Path -LiteralPath $StagingRoot).Path
+    $resolvedTempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
+    if (
+        -not $resolvedStageRoot.StartsWith($resolvedTempRoot, [StringComparison]::OrdinalIgnoreCase) -or
+        (Split-Path -Leaf $resolvedStageRoot) -ne 'expedient-employment-builder'
+    ) {
+        throw "Refusing to remove unexpected build staging path: $resolvedStageRoot"
+    }
+    Remove-Item -LiteralPath $resolvedStageRoot -Recurse -Force
+}
+New-Item -ItemType Directory -Path $StagingRoot | Out-Null
 
 # --- Resolve the app version from gui/package.json ---------------------------
 if (-not $Version) {
@@ -46,14 +60,34 @@ try {
 
     # --- 2. electron-builder: unpacked dir + portable zip ---------------------
     Write-Host 'Running electron-builder (--win dir zip)...'
-    & npx --yes electron-builder --config electron-builder.yml --win dir zip
-    if ($LASTEXITCODE -ne 0) { throw 'electron-builder failed.' }
+    $builderSucceeded = $false
+    for ($attempt = 1; $attempt -le 2; $attempt++) {
+        $staleStage = Join-Path $StagingRoot 'win-unpacked.tmp'
+        if (Test-Path -LiteralPath $staleStage) {
+            $resolvedStage = (Resolve-Path -LiteralPath $staleStage).Path
+            $resolvedRelease = [IO.Path]::GetFullPath($StagingRoot)
+            if (-not $resolvedStage.StartsWith($resolvedRelease, [StringComparison]::OrdinalIgnoreCase)) {
+                throw "Refusing to remove unexpected staging path: $resolvedStage"
+            }
+            Remove-Item -LiteralPath $resolvedStage -Recurse -Force
+        }
+        & npx --yes electron-builder --config electron-builder.yml --win dir zip "--config.directories.output=$StagingRoot"
+        if ($LASTEXITCODE -eq 0) {
+            $builderSucceeded = $true
+            break
+        }
+        if ($attempt -lt 2) {
+            Write-Warning 'electron-builder failed once; clearing its verified staging directory and retrying.'
+            Start-Sleep -Seconds 2
+        }
+    }
+    if (-not $builderSucceeded) { throw 'electron-builder failed after one clean retry.' }
 }
 finally {
     Pop-Location
 }
 
-$UnpackedDir = Join-Path $GuiDir 'release\win-unpacked'
+$UnpackedDir = Join-Path $StagingRoot 'win-unpacked'
 if (-not (Test-Path $UnpackedDir)) {
     throw "Expected electron-builder output at $UnpackedDir but it was not created."
 }
@@ -61,7 +95,7 @@ if (-not (Test-Path $UnpackedDir)) {
 # --- Collect the portable zip into release/ ----------------------------------
 if (-not (Test-Path $ReleaseDir)) { New-Item -ItemType Directory -Path $ReleaseDir | Out-Null }
 
-$zipArtifact = Get-ChildItem (Join-Path $GuiDir 'release') -Filter "*.zip" |
+$zipArtifact = Get-ChildItem $StagingRoot -Filter "*.zip" |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if (-not $zipArtifact) { throw 'electron-builder did not produce a portable zip.' }
 $zipOut = Join-Path $ReleaseDir "ExpedientEmployment-portable-$Version.zip"
@@ -73,6 +107,21 @@ $isccCandidates = @(
     (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'),
     (Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe')
 )
+$uninstallRoots = @(
+    'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+    'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+    'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+)
+foreach ($uninstallRoot in $uninstallRoots) {
+    $installLocations = Get-ItemProperty $uninstallRoot -ErrorAction SilentlyContinue |
+        Where-Object { $_.DisplayName -like 'Inno Setup version 6*' } |
+        Select-Object -ExpandProperty InstallLocation -ErrorAction SilentlyContinue
+    foreach ($installLocation in $installLocations) {
+        if ($installLocation) {
+            $isccCandidates += Join-Path $installLocation 'ISCC.exe'
+        }
+    }
+}
 $iscc = $isccCandidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
 if (-not $iscc) {
     $isccCommand = Get-Command ISCC.exe -ErrorAction SilentlyContinue
@@ -87,7 +136,7 @@ if (-not $iscc) {
 }
 
 Write-Host "Compiling the installer with $iscc ..."
-& $iscc "/DAppVersion=$Version" (Join-Path $RepoRoot 'installer\windows.iss')
+& $iscc "/DAppVersion=$Version" "/DSourceDir=$UnpackedDir" (Join-Path $RepoRoot 'installer\windows.iss')
 if ($LASTEXITCODE -ne 0) { throw 'Inno Setup compilation failed.' }
 
 $setupOut = Join-Path $ReleaseDir "ExpedientEmployment-Setup-$Version.exe"
@@ -99,3 +148,12 @@ Write-Host ''
 Write-Host 'Windows release complete:'
 Write-Host "  Installer:   $setupOut"
 Write-Host "  Portable:    $zipOut"
+
+$resolvedStageRoot = (Resolve-Path -LiteralPath $StagingRoot).Path
+$resolvedTempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
+if (
+    $resolvedStageRoot.StartsWith($resolvedTempRoot, [StringComparison]::OrdinalIgnoreCase) -and
+    (Split-Path -Leaf $resolvedStageRoot) -eq 'expedient-employment-builder'
+) {
+    Remove-Item -LiteralPath $resolvedStageRoot -Recurse -Force
+}

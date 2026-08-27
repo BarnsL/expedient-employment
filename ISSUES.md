@@ -14,7 +14,8 @@ Lightweight ticketing for this repository. Statuses: **Open**, **In progress**, 
 | EE-6 | Paperclip data directory (`.paperclip-runtime/`) is not portable across machines or moved checkouts | Open | Low | paperclip |
 | EE-7 | GUI Paperclip auto-launch requires Node.js on PATH | Open | Medium | gui / services |
 | EE-8 | Pipeline scripts depend on PowerShell; macOS/Linux require `pwsh` and several launchers are Windows-oriented | Open | Medium | scripts / cross-platform |
-| EE-9 | Packaged app: pipeline resource resolution in installed layouts needs end-to-end verification | Open | High | packaging |
+| EE-9 | Packaged app: pipeline resource resolution in installed layouts needs end-to-end verification | Done | High | packaging |
+| EE-10 | Windows installer is not Authenticode-signed | Open | Medium | packaging / trust |
 
 ---
 
@@ -98,12 +99,22 @@ Lightweight ticketing for this repository. Statuses: **Open**, **In progress**, 
 
 **Notes / next steps:** The GUI already resolves `pwsh` on non-Windows platforms. Remaining work: audit `scripts/agent-run.ps1` and the integration installers for POSIX virtual-env layouts (`bin/` vs `Scripts/`), and provide shell equivalents for the most common entry points. Track packaging verification under EE-5.
 
-## EE-9 — Packaged app: pipeline resource resolution in installed layouts needs end-to-end verification
+## EE-9: Packaged app resource resolution in installed layouts
 
-- **Status:** Open
+- **Status:** Done
 - **Priority:** High
 - **Area:** packaging
 
 **Description:** The electron-builder configuration bundles the pipeline (`job_pipeline/`, `run.ps1`, `scripts/`, `config/`, `docs/`) into `resources/pipeline/` via `extraResources`. In a packaged install the GUI must resolve the pipeline from that resources layout rather than the development checkout layout, and the pipeline writes data (`data/`, `reports/`, `logs/`) that must land somewhere writable in a per-user install.
 
-**Notes / next steps:** Smoke-test the `win-unpacked` output and the Inno-installed app end to end: doctor, demo, a real search, and report generation. Confirm writable data locations (likely under `%APPDATA%`) and that config edits from the Settings page target the writable copy, not the read-only bundled template.
+**Resolution:** Version 2.0.0 was built through the documented Windows release command, installed per-user, and verified from the installed resources. The authenticated control service reported healthy, registered twelve tools, exposed ten only-cli tools and two job tools, and completed an installed only-cli workflow. The Start Menu shortcut targets the installed executable, and the scheduled wake task completed with result zero.
+
+## EE-10: Windows installer is not Authenticode-signed
+
+- **Status:** Open
+- **Priority:** Medium
+- **Area:** packaging / trust
+
+**Description:** The 2.0.0 installer is built from verified local inputs but has no Authenticode signature. Windows may show an unknown-publisher warning.
+
+**Next step:** Obtain a trusted Windows code-signing certificate, configure the signing environment outside the repository, sign the application executable and installer, then verify the signature and timestamp in the release gate. Do not commit private signing material.

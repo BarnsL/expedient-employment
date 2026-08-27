@@ -33,10 +33,11 @@ The script will:
 
 1. Run `npm run build` in `gui/` (installing GUI dependencies first if needed).
 2. Run `npx --yes electron-builder --config electron-builder.yml --win dir zip`
-   from `gui/` — nothing is installed globally. This emits
-   `gui/release/win-unpacked/` (used by Inno) and a portable zip.
+   from `gui/`. Temporary Electron extraction is placed under the operating
+   system temporary directory so source-tree watchers cannot lock its rename.
 3. Copy the portable zip to `release/ExpedientEmployment-portable-<version>.zip`.
-4. Locate ISCC.exe and compile `installer/windows.iss` into
+4. Locate ISCC.exe through default paths, PATH, or the Inno Setup uninstall
+   registry entries, then compile `installer/windows.iss` into
    `release/ExpedientEmployment-Setup-<version>.exe`.
 
 The installer is per-user: it installs to
@@ -68,15 +69,19 @@ into `resources/pipeline/` inside the packaged app:
 - `run.ps1`, `run.cmd`, `scripts/`
 - `config/*.json` (excluding `*.local.json` — user-private config never ships)
 - `docs/`, `README.md`, `LICENSE`, `THIRD_PARTY_NOTICES.md`
+- the Git-pinned only-cli production runtime, installed with optional dependencies omitted
 
 Runtime data (`data/`, `reports/`, `logs/`) is never packaged; it is created at
-run time. End-to-end verification of the installed layout (resource resolution
-and writable data locations) is tracked as ISSUES.md EE-9.
+run time. Version 2.0.0 completed the installed-layout service, tool, shortcut,
+and scheduler verification tracked as ISSUES.md EE-9.
 
 ## Suggested release checklist
 
 1. Bump `version` in `gui/package.json`.
-2. Run the tests: `python -m pytest tests -q`.
-3. Run `packaging/build-windows.ps1` (and `build-posix.sh` on the other OSes).
-4. Smoke-test the installer and the portable zip on a clean machine.
-5. Create a GitHub Release and attach the artifacts listed above.
+2. Run `python -m unittest discover -s tests`.
+3. Run the renderer tests, lint, build, and Electron boundary tests.
+4. Run dependency, static-analysis, tracked-source privacy, and package-payload privacy gates.
+5. Run `packaging/build-windows.ps1` and platform-native POSIX builders where applicable.
+6. Install the result, run one installed only-cli workflow, verify the scheduled wake, and check the Start Menu shortcut.
+7. Sign and timestamp the Windows artifacts when a trusted signing certificate is available.
+8. Create a release and attach the verified artifacts.

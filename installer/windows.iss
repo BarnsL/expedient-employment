@@ -10,7 +10,9 @@
 #define AppId "com.expedient.employment"
 #define AppPublisher "Expedient Employment contributors"
 #define AppURL "https://github.com/BarnsL/expedient-employment"
-#define SourceDir "..\gui\release\win-unpacked"
+#ifndef SourceDir
+  #define SourceDir "..\gui\release\win-unpacked"
+#endif
 
 [Setup]
 AppId={{{#AppId}}
