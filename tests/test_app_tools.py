@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import tempfile
 import unittest
@@ -18,6 +19,30 @@ class AppToolTests(unittest.TestCase):
 
         def runner(arguments, **options):
             calls.append((arguments, options))
+            if "run" in arguments:
+                return subprocess.CompletedProcess(
+                    arguments,
+                    0,
+                    json.dumps(
+                        {
+                            "status": "ok",
+                            "saved": 1,
+                            "errors": 0,
+                            "report": "reports/job_matches.csv",
+                            "jobs": [
+                                {
+                                    "id": "job12345",
+                                    "title": "Recruiting Coordinator",
+                                    "company": "Example Co",
+                                    "location": "Remote",
+                                    "url": "https://example.test/jobs/1",
+                                    "score": 84.0,
+                                }
+                            ],
+                        }
+                    ),
+                    "",
+                )
             return subprocess.CompletedProcess(arguments, 0, "completed", "")
 
         with tempfile.TemporaryDirectory() as temp:
@@ -46,9 +71,12 @@ class AppToolTests(unittest.TestCase):
             )
 
         self.assertEqual(pipeline.data["status"], "ok")
+        self.assertEqual(pipeline.data["jobs"][0]["title"], "Recruiting Coordinator")
+        self.assertEqual(pipeline.summary, "Pipeline run: ok, 1 job saved")
         self.assertEqual(draft.data["status"], "ok")
         flattened = " ".join(value for call, _ in calls for value in call)
         self.assertIn("--max-jobs 250", flattened)
+        self.assertIn("--output-json", flattened)
         self.assertIn("agent-c abc123def456", flattened)
         self.assertNotIn("agent-c-browser", flattened)
         self.assertNotIn("--submit", flattened)

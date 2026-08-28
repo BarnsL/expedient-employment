@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -111,10 +112,25 @@ class JobPipelineToolAdapter:
                     "--max-jobs", str(arguments["max_jobs"]),
                     "--concurrency", str(arguments["concurrency"]),
                     "--min-score", str(arguments["min_score"]),
+                    "--output-json",
                 ],
                 timeout_seconds=900,
             )
-            return ToolResult(data=result.to_dict(), summary=f"Pipeline run: {result.status}")
+            if result.status != "ok":
+                return ToolResult(data=result.to_dict(), summary=f"Pipeline run: {result.status}")
+            try:
+                payload = json.loads(result.output)
+            except (json.JSONDecodeError, TypeError) as exc:
+                raise RuntimeError("Job pipeline returned an invalid structured result.") from exc
+            if not isinstance(payload, dict) or not isinstance(payload.get("jobs"), list):
+                raise RuntimeError("Job pipeline result did not include job summaries.")
+            payload["exit_code"] = result.exit_code
+            saved = int(payload.get("saved", len(payload["jobs"])))
+            noun = "job" if saved == 1 else "jobs"
+            return ToolResult(
+                data=payload,
+                summary=f"Pipeline run: {result.status}, {saved} {noun} saved",
+            )
 
         def prepare_draft(arguments: dict[str, Any], _context: ToolContext) -> ToolResult:
             job_id = str(arguments["job_id"])
@@ -142,7 +158,8 @@ class JobPipelineToolAdapter:
                 name="jobs.pipeline.run",
                 description=(
                     "Discover, extract, score, store, and report a bounded batch of jobs. "
-                    "This never submits an application."
+                    "Returns the current run's job titles, companies, locations, scores, and URLs "
+                    "so the assistant can summarize them directly. This never submits an application."
                 ),
                 policy=ToolPolicy.LOCAL_WRITE,
                 input_schema={

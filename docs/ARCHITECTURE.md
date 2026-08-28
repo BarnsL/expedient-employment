@@ -52,6 +52,10 @@ Audit records contain lifecycle state, duration, policy, hashes, sizes, and erro
 
 The runtime is pinned under `gui/only-cli-runtime`. Installation omits optional dependencies, which excludes the optional fingerprint-impersonation transport. The packaged application contains only the reviewed runtime closure.
 
+The same typed adapter is the pipeline's default discovery and extraction backend when Tavily is not configured and external WebClaw is absent. Public LinkedIn guest job search is attempted first, with DuckDuckGo and Bing as bounded fallbacks. Search redirects are unwrapped, tracking parameters are removed, page URLs pass the public-address policy, and compact page blocks are normalized into the existing job schema. Access challenges stop that backend and move to the next public source; the app does not solve or bypass them.
+
+Successful `jobs.pipeline.run` calls use the internal `--output-json` mode to return a bounded summary of the current run's titles, employers, locations, scores, and URLs. The chat can therefore summarize the completed run directly instead of guessing at follow-up browser sessions.
+
 ## Web intelligence and workflows
 
 `job_pipeline/web_intelligence.py` implements public-page fetching with:

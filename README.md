@@ -14,7 +14,7 @@ The application prepares work for the user. It never submits an application, sen
 - **Application workspace:** records lifecycle state, outcomes, notes, evidence, packets, and undoable user decisions.
 - **Connection assistant:** supports provider and model selection, durable transcripts, queued and editable messages, retries, local image context, and tool calls.
 - **Agent tool broker:** exposes JSON-schema tools through typed policy classes, bounded execution, cancellation, output caps, content-free audit events, and exact approval digests.
-- **only-cli integration:** gives the assistant implemented read and navigation tools through a pinned MIT runtime. Optional fingerprint impersonation is not installed or packaged.
+- **only-cli integration:** gives the assistant implemented read and navigation tools through a pinned MIT runtime, and gives the recruiting pipeline zero-setup public job discovery and page extraction. Optional fingerprint impersonation is not installed or packaged.
 - **Web Workbench:** runs validated DAG workflows with dry-run previews, bounded retries, resumable state, cancellation, circuit controls, interpolation, and structured results.
 - **Automations:** stores interval or daily schedules, leases due work safely, coalesces missed runs, records history, and can install a hidden per-user Windows wake task.
 - **Application drafts:** creates local draft packets only. Employer-facing execution is not registered as a tool.

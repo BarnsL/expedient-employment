@@ -141,6 +141,115 @@ class PipelineTests(unittest.TestCase):
                 client._validate_page_url("https://internal.example/jobs/1")
         self.assertEqual(len(checked), 2)
 
+    def test_bundled_only_cli_is_a_zero_setup_search_and_scrape_fallback(self) -> None:
+        """Keep the packaged pipeline usable without WebClaw or a Tavily credential."""
+        job_url = "https://www.linkedin.com/jobs/view/recruiting-coordinator-123456"
+
+        class FakeOnlyCli:
+            def __init__(self) -> None:
+                self.calls: list[tuple[str, list[str]]] = []
+
+            def available(self) -> bool:
+                return True
+
+            def run(self, command: str, arguments: list[str], **_options):
+                self.calls.append((command, arguments))
+                if command == "site":
+                    payload = {
+                        "blocks": [
+                            {
+                                "type": "link",
+                                "text": "Recruiting Coordinator at Example",
+                                "href": job_url + "?position=1&trackingId=synthetic",
+                            },
+                        ],
+                        "empty": False,
+                    }
+                else:
+                    payload = {
+                        "url": job_url,
+                        "title": "Recruiting Coordinator | Example",
+                        "blocks": [
+                            {"type": "heading", "level": 3, "text": "Recruiting Coordinator"},
+                            {
+                                "type": "link",
+                                "text": "Example",
+                                "href": "https://www.linkedin.com/company/example",
+                            },
+                            {"type": "text", "text": "Remote"},
+                            {
+                                "type": "text",
+                                "text": "Example is hiring a recruiting coordinator. " * 12,
+                            },
+                        ],
+                        "empty": False,
+                    }
+                return SimpleNamespace(
+                    status="ok",
+                    stdout=json.dumps(payload),
+                    stderr="",
+                    exit_code=0,
+                )
+
+        only_cli = FakeOnlyCli()
+        with patch.dict(os.environ, {"TAVILY_API_KEY": ""}, clear=False):
+            client = WebClawClient(ROOT, only_cli=only_cli)
+            results = client.search("recruiting coordinator", num=5)
+            scraped = client.scrape(job_url)
+
+        self.assertEqual([result["link"] for result in results], [job_url])
+        self.assertEqual(scraped["metadata"]["title"], "Recruiting Coordinator | Example")
+        self.assertIn("Example is hiring", scraped["content"]["plain_text"])
+        normalized = normalize_webclaw_job(job_url, scraped)
+        self.assertEqual(normalized.title, "Recruiting Coordinator")
+        self.assertEqual(normalized.company, "Example")
+        self.assertEqual(normalized.location, "Remote")
+        self.assertEqual([call[0] for call in only_cli.calls], ["site", "open"])
+        self.assertEqual(only_cli.calls[0][1][:2], ["linkedin", "jobs"])
+
+    def test_only_cli_job_search_falls_back_when_linkedin_guest_search_is_blocked(self) -> None:
+        """Use the general public search path when LinkedIn returns an access challenge."""
+        job_url = "https://jobs.lever.co/example/abc123"
+
+        class ChallengedOnlyCli:
+            def __init__(self) -> None:
+                self.calls: list[list[str]] = []
+
+            def available(self) -> bool:
+                return True
+
+            def run(self, _command: str, arguments: list[str], **_options):
+                self.calls.append(arguments)
+                if arguments[0] == "linkedin":
+                    return SimpleNamespace(
+                        status="challenge", stdout="", stderr="public guest view blocked",
+                        exit_code=2,
+                    )
+                payload = {
+                    "url": "https://html.duckduckgo.com/html/?q=jobs",
+                    "blocks": [{
+                        "type": "heading",
+                        "text": "Recruiting Coordinator at Example",
+                        "href": (
+                            "//duckduckgo.com/l/?uddg="
+                            "https%3A%2F%2Fjobs.lever.co%2Fexample%2Fabc123"
+                        ),
+                    }],
+                    "empty": False,
+                }
+                return SimpleNamespace(
+                    status="ok", stdout=json.dumps(payload), stderr="", exit_code=0,
+                )
+
+        only_cli = ChallengedOnlyCli()
+        with patch.dict(os.environ, {"TAVILY_API_KEY": ""}, clear=False):
+            results = WebClawClient(ROOT, only_cli=only_cli).search(
+                "recruiting coordinator", num=5
+            )
+
+        self.assertEqual([result["link"] for result in results], [job_url])
+        self.assertEqual([call[0] for call in only_cli.calls], ["linkedin", "ddg"])
+
     def test_hrmdirect_canonical_url_deduplicates_location_variants(self) -> None:
         """Use the requisition ID as the HRMDirect identity across location links."""
         first = canonical_url(

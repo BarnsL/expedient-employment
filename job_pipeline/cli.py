@@ -615,7 +615,10 @@ def command_run(args: argparse.Namespace, root: Path) -> int:
     search_config = read_json(root / "config" / "searches.json")
     urls = discover_urls(client, search_config, args.max_jobs)
     if not urls:
-        print("No job URLs were discovered. Check TAVILY_API_KEY and search queries.", file=sys.stderr)
+        print(
+            "No job URLs were discovered. Check public network access and search queries.",
+            file=sys.stderr,
+        )
         return 2
     database = root / "data" / "jobs.sqlite3"
     with JobStore(database) as store:
@@ -632,8 +635,39 @@ def command_run(args: argparse.Namespace, root: Path) -> int:
         )
         score_jobs(store, profile, resume_text, client, args.ai, args.llm_provider, args.llm_model)
         paths = _export(store, profile, root, args.min_score)
+        job_summaries = []
+        for job in jobs:
+            match = store.match(job.id)
+            job_summaries.append(
+                {
+                    "id": job.id,
+                    "title": job.title,
+                    "company": job.company,
+                    "location": job.location,
+                    "work_mode": job.work_mode,
+                    "employment_type": job.employment_type,
+                    "posted_date": job.posted_date,
+                    "url": job.url,
+                    "score": match.final_score if match else None,
+                    "fit_label": match.fit_label if match else "",
+                }
+            )
         store.finish_run(run_id, len(urls), len(jobs), len(errors))
-    print(f"Pipeline complete: {len(jobs)} jobs saved, {len(errors)} errors. Report: {paths[0]}")
+    if args.output_json:
+        print(
+            json.dumps(
+                {
+                    "status": "ok" if jobs else "failed",
+                    "saved": len(jobs),
+                    "errors": len(errors),
+                    "report": str(paths[0]),
+                    "jobs": job_summaries,
+                },
+                ensure_ascii=False,
+            )
+        )
+    else:
+        print(f"Pipeline complete: {len(jobs)} jobs saved, {len(errors)} errors. Report: {paths[0]}")
     return 0 if jobs else 2
 
 
@@ -2467,6 +2501,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--max-jobs", type=int, default=30)
     run.add_argument("--concurrency", type=int, default=4)
     run.add_argument("--min-score", type=float, default=0)
+    run.add_argument("--output-json", action="store_true", help=argparse.SUPPRESS)
     _add_resume_option(run)
     _add_ai_options(run, include_extract=True)
     run.set_defaults(handler=command_run)

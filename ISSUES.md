@@ -16,6 +16,7 @@ Lightweight ticketing for this repository. Statuses: **Open**, **In progress**, 
 | EE-8 | Pipeline scripts depend on PowerShell; macOS/Linux require `pwsh` and several launchers are Windows-oriented | Open | Medium | scripts / cross-platform |
 | EE-9 | Packaged app: pipeline resource resolution in installed layouts needs end-to-end verification | Done | High | packaging |
 | EE-10 | Windows installer is not Authenticode-signed | Open | Medium | packaging / trust |
+| EE-11 | Packaged chat job pipeline fails when external WebClaw is absent | Done | Critical | assistant / discovery |
 
 ---
 
@@ -118,3 +119,13 @@ Lightweight ticketing for this repository. Statuses: **Open**, **In progress**, 
 **Description:** The 2.0.0 installer is built from verified local inputs but has no Authenticode signature. Windows may show an unknown-publisher warning.
 
 **Next step:** Obtain a trusted Windows code-signing certificate, configure the signing environment outside the repository, sign the application executable and installer, then verify the signature and timestamp in the release gate. Do not commit private signing material.
+
+## EE-11: Packaged chat job pipeline fails without external WebClaw
+
+- **Status:** Done
+- **Priority:** Critical
+- **Area:** assistant / discovery
+
+**Description:** The assistant advertised `jobs.pipeline.run` as ready, but the packaged command constructed its legacy WebClaw client before checking credential-free backends. A default installation with no external WebClaw binary and no Tavily key therefore failed before discovery began.
+
+**Resolution:** Version 2.0.1 makes external WebClaw optional and uses the already bundled, pinned MIT only-cli runtime for public job search and page extraction. Public LinkedIn guest results are preferred, general public search providers are bounded fallbacks, redirects and tracking parameters are removed, and LinkedIn page blocks are normalized into clean role, employer, and location fields. Deterministic regressions cover the default path and challenged-source fallback. A live zero-key run saved five recruiting jobs with zero extraction errors.
