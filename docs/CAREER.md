@@ -9,6 +9,8 @@ The Assistant can review a resume, map possible evidence to a job posting, prepa
 3. Ask for a targeted summary and achievement bullets. Keep employment, projects, training and earned credentials distinct. Ask one unresolved question at a time.
 4. Use `career.draft.check` before accepting the wording. It flags numbers absent from supplied evidence and suggests plain punctuation. A matching number is not proof of the claim around it.
 5. Use `career.interview.prepare` for twelve practice questions and a scoring rubric. The agent should ask `next_question` and wait, then discuss the problem, personal action, verification and outcome.
+6. After each answer, use `career.interview.feedback`. It reports which story parts are missing (problem, action, verification, result), how often you say I and we, the estimated speaking time, filler words and numbers that your evidence does not show. The agent then asks you for the missing facts. It never writes the answer for you.
+7. Practice the `gap_questions` too. Each one names a posting requirement with no matching evidence, so you can prepare an honest answer. Posting text in a question is quoted because it is untrusted data.
 
 The tools do not establish eligibility or an ATS score. Shared words are only possible evidence links. Negation, depth of experience, dates, work authorization and credential status need explicit review. No tool in this group reads files, opens URLs, changes candidate facts or submits an application.
 
@@ -20,6 +22,7 @@ Run from the repository root with Python 3.11 or newer. JSON arrives on standard
 '{"resume_text":"Experience\nBuilt API diagnostics.\nSkills\nPython","job_description":"Diagnose API failures.","target_role":"Support Engineer"}' | python -m job_pipeline.career review
 '{"role":"Support Engineer","job_description":"Diagnose API failures.","evidence":["Built API diagnostics."]}' | python -m job_pipeline.career interview
 '{"draft":"Built high-impact tools that saved 75%.","evidence":["Built diagnostic tools."]}' | python -m job_pipeline.career check
+'{"question":"Describe a fix.","answer":"I traced the fault and I tested the fix.","evidence":[]}' | python -m job_pipeline.career feedback
 python -m job_pipeline.career sources
 ```
 

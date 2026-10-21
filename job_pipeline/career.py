@@ -58,10 +58,24 @@ def _terms(text: str) -> set[str]:
     return {term for term in re.findall(r"\b[a-z][a-z0-9+#.]{2,}\b", text.lower()) if term not in stop}
 
 
+REQUIREMENT_CUE = re.compile(
+    r"(?i)\b(?:require[ds]?|must|experience (?:with|in)|proficien\w*|knowledge of|familiar\w*|"
+    r"ability to|you will|responsib\w*|qualif\w*|degree|certif\w*|years of)\b")
+
+
 def _requirements(posting: str) -> list[str]:
     # ponytail: explicit lines and sentences only; semantic requirement extraction stays with the reviewing agent.
-    return [line.strip(" •*\t") for line in re.split(r"[\n;]+|(?<=[.!?])\s+", posting)
-            if len(line.strip()) > 5][:12]
+    lines = [line.strip(" •*-\t") for line in re.split(r"[\n;]+|(?<=[.!?])\s+", posting)
+             if len(line.strip(" •*-\t")) > 5]
+    # Postings open with titles and culture text. Requirement lines go first, in their original order.
+    cued = [line for line in lines if REQUIREMENT_CUE.search(line)]
+    return (cued + [line for line in lines if line not in cued])[:12]
+
+
+def _quote(text: str, limit: int = 160) -> str:
+    """Quote untrusted posting text so a reader sees it as data, not as an instruction."""
+    flat = " ".join(text.split()).replace('"', "'")
+    return '"' + (flat[:limit].rstrip() + "..." if len(flat) > limit else flat) + '"'
 
 
 def _mapping(posting: str, evidence: list[str]) -> list[dict[str, Any]]:
@@ -120,7 +134,7 @@ def prepare_interview(role: str, job_description: str, evidence: list[str]) -> d
         {"kind": "project", "question": "What problem did that project solve, and who needed it?"},
         {"kind": "project", "question": "What did you personally build or change?"},
         {"kind": "project", "question": "How did you test the result and distinguish your work from the team's work?"},
-        {"kind": "technical", "question": f"How would you approach this requirement: {focus}"},
+        {"kind": "technical", "question": f"How would you approach this requirement from the posting: {_quote(focus)}"},
         {"kind": "technical", "question": "What hypotheses would you test before selecting a solution?"},
         {"kind": "technical", "question": "Which failure cases and trade offs matter, and why?"},
         {"kind": "technical", "question": "How would you verify recovery, correctness and a safe rollback?"},
@@ -129,8 +143,14 @@ def prepare_interview(role: str, job_description: str, evidence: list[str]) -> d
         {"kind": "behavioral", "question": "How did you explain a technical problem to another person?"},
         {"kind": "behavioral", "question": "Which requirement needs more experience, and how would you address that honestly?"},
     ]
+    mapping = _mapping(posting, facts)
+    gap_questions = [
+        {"kind": "gap", "question": f"The posting asks for {_quote(item['posting_text'])}. What real experience do you have, "
+                                    "and what would you say honestly if you have none?"}
+        for item in mapping if item["status"] == "needs_evidence" and REQUIREMENT_CUE.search(item["posting_text"])
+    ][:3]
     return {"status": "practice_only", "role": role, "questions": questions, "next_question": questions[0],
-            "wait_for_answer": True, "job_evidence": _mapping(posting, facts),
+            "wait_for_answer": True, "job_evidence": mapping, "gap_questions": gap_questions,
             "rubric": ["relevance", "specificity", "personal contribution", "verification", "outcome", "clarity"],
             "story_fields": ["problem", "action", "verification", "result", "evidence source"],
             "review_sheet": ["A natural introduction lasting about one minute.", "Three real stories.",
@@ -142,9 +162,8 @@ def prepare_interview(role: str, job_description: str, evidence: list[str]) -> d
 def check_draft(draft: str, evidence: list[str]) -> dict[str, Any]:
     draft = _text(draft, "draft", required=True)
     facts = _evidence(evidence)
-    numbers = re.compile(r"(?<!\w)\$?\d+(?:[.,]\d+)*(?:%|\b)")
-    supported = set(numbers.findall("\n".join(facts)))
-    missing = sorted(set(numbers.findall(draft)) - supported)
+    supported = set(NUMBER.findall("\n".join(facts)))
+    missing = sorted(set(NUMBER.findall(draft)) - supported)
     return {"status": "needs_review", "facts_verified": False, "auto_submit": False,
             "metrics_needing_evidence": missing, "dash_count": prose_dash_count(draft),
             "suggested_text": polish_prose(draft),
@@ -154,9 +173,60 @@ def check_draft(draft: str, evidence: list[str]) -> dict[str, Any]:
             "sources": [SOURCES[4]]}
 
 
+NUMBER = re.compile(r"(?<!\w)\$?\d+(?:[.,]\d+)*(?:%|\b)")
+STORY_PARTS = {
+    "problem": re.compile(r"(?i)\b(?:problem|issue|challenge|goal|needed|failing|failed|broke|broken|outage|request|ticket|risk)\b"),
+    "action": re.compile(r"(?i)\bI\s+(?:\w+\s+)?(?:built|wrote|rewrote|changed|created|fixed|designed|led|added|replaced|traced|"
+                         r"set up|configured|automated|investigated|diagnosed|migrated|reviewed|found|asked|planned)\b"),
+    "verification": re.compile(r"(?i)\b(?:tested|verified|checked|confirmed|measured|monitored|validated|reproduced|compared)\b"),
+    "result": re.compile(r"(?i)\b(?:result|outcome|so that|reduced|increased|cut|saved|resolved|improved|now|afterward|after that)\b"),
+}
+FILLERS = re.compile(r"(?i)\b(?:um+|uh+|like,|basically|kind of|sort of|you know|literally)")
+PROMPTS = {
+    "problem": "Name the problem and who it affected.",
+    "action": "Say what you personally did, starting with I.",
+    "verification": "Say how you checked that the change worked.",
+    "result": "Say what changed afterward, with a number only if you can prove it.",
+}
+
+
+def feedback_answer(question: str, answer: str, evidence: list[str] | None = None) -> dict[str, Any]:
+    """Coach one practice answer. Report gaps and ask for facts. Never write the answer."""
+    question = _text(question, "question", 500, required=True)
+    answer = _text(answer, "answer", 8000, required=True)
+    facts = _evidence(evidence or [])
+    words = re.findall(r"[A-Za-z0-9']+", answer)
+    present = {name: bool(pattern.search(answer)) for name, pattern in STORY_PARTS.items()}
+    missing = [name for name, found in present.items() if not found]
+    lower = [word.lower() for word in words]
+    ownership = {"i": sum(w in {"i", "my", "me", "i'm", "i've"} for w in lower),
+                 "we": sum(w in {"we", "our", "us", "we're", "we've"} for w in lower)}
+    fillers = dict(Counter(match.lower().rstrip(",") for match in FILLERS.findall(answer)))
+    unsupported = sorted(set(NUMBER.findall(answer)) - set(NUMBER.findall("\n".join(facts))))
+    seconds = round(len(words) / 140 * 60)
+    steps = [PROMPTS[name] for name in missing]
+    if ownership["we"] > ownership["i"]:
+        steps.append("Separate your own work from the team's work.")
+    if unsupported:
+        steps.append("Confirm each number against a record before you say it.")
+    if fillers:
+        steps.append("Pause instead of using filler words.")
+    if seconds < 45:
+        steps.append("Add one specific detail. Aim for one to two minutes.")
+    elif seconds > 150:
+        steps.append("Cut background. Aim for one to two minutes.")
+    return {"status": "practice_feedback", "question": question, "story_parts": present, "missing": missing,
+            "ownership": ownership, "word_count": len(words), "estimated_seconds": seconds,
+            "fillers": fillers, "metrics_needing_evidence": unsupported, "next_steps": steps,
+            "facts_verified": False, "rubric": ["relevance", "specificity", "personal contribution",
+                                                 "verification", "outcome", "clarity"],
+            "sources": [SOURCES[5]],
+            "limits": "Keyword checks guide practice. They do not grade truth, tone or employer fit."}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Review career material locally from JSON on standard input.")
-    parser.add_argument("operation", choices=("review", "interview", "check", "sources"))
+    parser.add_argument("operation", choices=("review", "interview", "check", "feedback", "sources"))
     args = parser.parse_args(argv)
     try:
         if args.operation == "sources":
@@ -168,7 +238,8 @@ def main(argv: list[str] | None = None) -> int:
             body = json.loads(raw)
             if not isinstance(body, dict):
                 raise ValueError("Provide one JSON object.")
-            function = {"review": review_resume, "interview": prepare_interview, "check": check_draft}[args.operation]
+            function = {"review": review_resume, "interview": prepare_interview, "check": check_draft,
+                        "feedback": feedback_answer}[args.operation]
             result = function(**body)
         print(json.dumps(result, ensure_ascii=True, indent=2))
         return 0

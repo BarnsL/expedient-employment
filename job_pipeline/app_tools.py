@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from .career import review_resume, prepare_interview, check_draft
+from .career import review_resume, prepare_interview, check_draft, feedback_answer
 from .tool_broker import ToolContext, ToolPolicy, ToolResult, ToolSpec
 from .util import redact_secrets, write_json
 
@@ -182,6 +182,17 @@ class JobPipelineToolAdapter:
                     "evidence": {"type": "array", "maxItems": 20, "items": {"type": "string", "minLength": 1, "maxLength": 2000}}},
                     "required": ["role", "job_description", "evidence"], "additionalProperties": False},
                 handler=lambda args, _ctx: ToolResult(data=prepare_interview(**args), summary="Interview practice prepared. Ask one question."),
+            ),
+            ToolSpec(
+                name="career.interview.feedback",
+                description="Coach one practice answer. Reports missing story parts, ownership, length, filler words and numbers absent from evidence. Ask the person for facts. Never write the answer for them.",
+                policy=ToolPolicy.READ,
+                input_schema={"type": "object", "properties": {
+                    "question": {"type": "string", "minLength": 1, "maxLength": 500},
+                    "answer": {"type": "string", "minLength": 1, "maxLength": 8000},
+                    "evidence": {"type": "array", "maxItems": 20, "items": {"type": "string", "minLength": 1, "maxLength": 2000}}},
+                    "required": ["question", "answer"], "additionalProperties": False},
+                handler=lambda args, _ctx: ToolResult(data=feedback_answer(**args), summary="Answer feedback prepared. Ask for missing facts."),
             ),
             ToolSpec(
                 name="career.draft.check",
