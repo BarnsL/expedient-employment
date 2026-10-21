@@ -91,6 +91,15 @@ Packaged Python runs with bytecode writes disabled so installed resource directo
 
 Restricted license product source is not copied into the application. Comparable capabilities are original implementations based only on public product requirements.
 
+### Dependency audit snapshot for 2026-10-21
+
+- The shipped GUI dependencies and the root tree report zero known vulnerabilities.
+- `electron-builder` is pinned to 26.17.0 in `gui/package-lock.json`. The build script uses `npx --no-install`, so a build never downloads an unpinned builder.
+- Accepted build finding: `sprintf-js` 1.1.3 (GHSA-hp3w-g68c-fv3c, moderate, denial of service) comes through `electron-builder`, `@electron/get`, `global-agent` and `roarr`. No fixed release exists. It runs only on the build machine while Electron downloads. The packaged app and `app.asar` were inspected and do not contain it. CI audits shipped dependencies at moderate and all dependencies at high.
+- The optional browser-use runtime drives autonomous submission on employer pages. `browser-use[core]` 0.13.8 pins exact versions with published advisories, including critical findings in `anyio` and `pillow`. Versions 0.13.10 and 0.13.11 keep the same problem. `scripts/install-agent-integrations.ps1` installs these fixed versions after browser-use: `aiohttp` 3.14.4, `anyio` 4.14.2, `mcp` 1.30.0, `pillow` 13.0.0, `pypdf` 6.21.1 and `typing-extensions` 4.15.0. With them, an OSV query of the full runtime reports no vulnerable runtime package. All browser-use submodules import (the optional `oci` extra excepted), the runner's Agent configuration builds, and image, PDF, async and HTTP paths run. `pip check` reports these overrides as deliberate conflicts. Install through the script. The `browser-use` extra in `pyproject.toml` does not apply the overrides.
+- `pillow` 13.0.0 and `pypdf` 6.21.1 are newer than the usual two week waiting period. They are the minimum versions that fix the published advisories, so the fix outweighs the wait.
+- The Windows installer is unsigned. Compare the SHA-256 values in the release notes before you run it.
+
 ### Dependency audit snapshot for 2026-08-26
 
 - The locked GUI tree and locked only-cli tree each report zero known vulnerabilities.

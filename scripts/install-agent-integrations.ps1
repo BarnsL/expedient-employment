@@ -28,7 +28,8 @@ function Install-AgentRuntime {
         [Parameter(Mandatory = $true)][string]$RuntimeName,
         [Parameter(Mandatory = $true)][string]$Package,
         [Parameter(Mandatory = $true)][string]$ImportCode,
-        [Parameter(Mandatory = $true)][string]$DisplayName
+        [Parameter(Mandatory = $true)][string]$DisplayName,
+        [string[]]$SecurityOverrides = @()
     )
     $RuntimeRoot = Join-Path $ProjectRoot "tools\$RuntimeName"
     $VenvPython = Join-Path $RuntimeRoot 'Scripts\python.exe'
@@ -40,6 +41,12 @@ function Install-AgentRuntime {
     if ($LASTEXITCODE -ne 0) { throw "Could not update pip in the $DisplayName runtime." }
     & $VenvPython -m pip install $Package
     if ($LASTEXITCODE -ne 0) { throw "$DisplayName installation failed." }
+    if ($SecurityOverrides.Count -gt 0) {
+        # Upstream pins exact versions with published advisories. These fixed versions were
+        # tested against the runner. pip check reports them as deliberate conflicts.
+        & $VenvPython -m pip install @SecurityOverrides
+        if ($LASTEXITCODE -ne 0) { throw "$DisplayName security overrides failed." }
+    }
     & $VenvPython -c $ImportCode
     if ($LASTEXITCODE -ne 0) { throw "$DisplayName import validation failed." }
     Write-Host "$DisplayName runtime ready: $RuntimeRoot"
@@ -61,8 +68,16 @@ if ($BrowserUse -or $All) {
     Install-AgentRuntime `
         -RuntimeName 'browser-use-runtime' `
         -Package 'browser-use[core]==0.13.8' `
-        -ImportCode 'from browser_use import Agent, BrowserProfile' `
-        -DisplayName 'browser-use'
+        -ImportCode 'from browser_use import Agent, BrowserProfile, ChatOpenAI, Tools; import mcp, anyio, aiohttp, PIL, pypdf' `
+        -DisplayName 'browser-use' `
+        -SecurityOverrides @(
+            'aiohttp==3.14.4',
+            'anyio==4.14.2',
+            'mcp==1.30.0',
+            'pillow==13.0.0',
+            'pypdf==6.21.1',
+            'typing-extensions==4.15.0'
+        )
 }
 
 Write-Host 'Optional runtimes are isolated because JobSpy and browser-use require incompatible markdownify versions.'

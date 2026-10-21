@@ -26,6 +26,12 @@ $ReleaseDir = Join-Path $RepoRoot 'release'
 $StagingRoot = Join-Path ([IO.Path]::GetTempPath()) 'expedient-employment-builder'
 $PythonRuntimeDir = Join-Path $RepoRoot 'python-runtime'
 
+# Inno Setup cannot read staged files whose full path exceeds 260 characters.
+# Nested node_modules add about 170 characters below the staging root.
+if ($StagingRoot.Length -gt 80) {
+    throw "The temp path is too long for Inno Setup: $StagingRoot. Set TEMP and TMP to a short folder, for example D:\eetmp, and run again."
+}
+
 if (Test-Path -LiteralPath $StagingRoot) {
     $resolvedStageRoot = (Resolve-Path -LiteralPath $StagingRoot).Path
     $resolvedTempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
@@ -98,7 +104,7 @@ try {
             }
             Remove-Item -LiteralPath $resolvedStage -Recurse -Force
         }
-        & npx --yes electron-builder --config electron-builder.yml --win dir zip "--config.directories.output=$StagingRoot"
+        & npx --no-install electron-builder --config electron-builder.yml --win dir zip "--config.directories.output=$StagingRoot"
         if ($LASTEXITCODE -eq 0) {
             $builderSucceeded = $true
             break

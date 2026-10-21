@@ -43,4 +43,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run build
       - run: node node_modules/vitest/vitest.mjs run --maxWorkers=1
-      - run: npm audit --audit-level=moderate
+      # Shipped dependencies must have no moderate or higher advisory.
+      - run: npm audit --omit=dev --audit-level=moderate
+      # Build tools run only on the build machine. See docs/SECURITY.md for accepted findings.
+      - run: npm audit --audit-level=high
