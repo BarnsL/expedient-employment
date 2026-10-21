@@ -67,6 +67,7 @@ export default function App() {
                 key={item.key}
                 onClick={() => setPage(item.key)}
                 title={item.label}
+                aria-label={item.label}
                 className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
                   active
                     ? 'bg-cyan-500/15 text-cyan-300'
@@ -80,7 +81,7 @@ export default function App() {
           })}
         </nav>
         <div className="hidden border-t border-slate-800 px-5 py-3 text-[10px] text-slate-600 lg:block">
-          job-hunting pipeline · local-first
+          job search agent on your computer
         </div>
       </aside>
 

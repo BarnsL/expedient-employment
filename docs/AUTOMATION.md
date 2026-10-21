@@ -5,7 +5,7 @@
 Automations can use either:
 
 - an interval in seconds; or
-- a daily wall-clock time with an IANA timezone.
+- a daily wall clock time with an IANA timezone.
 
 Each schedule stores its workflow, next due time, enabled state, lease state, and run history. A missed interval is coalesced into one due run. The scheduler does not replay an unlimited backlog.
 
@@ -23,11 +23,11 @@ The scheduled tool policy permits:
 - local writes;
 - local external drafts.
 
-It rejects external-action tools even if an approval digest is supplied. A human must initiate and approve employer-facing action in an interactive session.
+It rejects external action tools even if an approval digest is supplied. A human must initiate and approve employer facing action in an interactive session.
 
 ## Windows background wake
 
-The installer script creates a per-user scheduled task that:
+The installer script creates a per user scheduled task that:
 
 - runs hidden;
 - uses limited privilege;
@@ -67,4 +67,4 @@ Use dry run before saving a new workflow or changing an existing workflow's tool
 
 ## Data handling
 
-Workflow state stores normalized arguments, result objects, status, timing, and error class. Credentials and browser session data stay in their integration-owned stores. Do not place secrets directly in workflow JSON.
+Workflow state stores normalized arguments, result objects, status, timing, and error class. Credentials and browser session data stay in their integration owned stores. Do not place secrets directly in workflow JSON.

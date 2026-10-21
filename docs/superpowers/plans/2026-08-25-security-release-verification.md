@@ -1,12 +1,12 @@
 # Security, Release, and Verification Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Harden, document, package, install, and visibly verify the complete MIT Expedient Employment application.
 
-**Architecture:** Security controls live at URL, process, IPC, attachment, approval, and persistence trust boundaries. Verification covers source, dependencies, packaged artifacts, installed shortcuts, scheduled execution, assistant tool use, and the user-visible Electron runtime.
+**Architecture:** Security controls live at URL, process, IPC, attachment, approval, and persistence trust boundaries. Verification covers source, dependencies, packaged artifacts, installed shortcuts, scheduled execution, assistant tool use, and the user visible Electron runtime.
 
-**Tech Stack:** Python, Node.js, Electron Builder, Windows PowerShell, pip-audit or equivalent, npm audit, static scanners, Understand Anything
+**Tech Stack:** Python, Node.js, Electron Builder, Windows PowerShell, pip audit or equivalent, npm audit, static scanners, Understand Anything
 
 ## Global Constraints
 
@@ -33,7 +33,7 @@
 **Interfaces:**
 - Produces: exact navigation allowlist, redirect revalidation, attachment validation, redacted audit summaries, origin checks, and approval invalidation
 
-- [ ] **Step 1: Write failing exploit-regression tests**
+- [ ] **Step 1: Write failing exploit regression tests**
 
 Cover traversal, malformed drive paths, UNC paths, shell metacharacters, unsafe protocols, private redirect, DNS mismatch, oversized or binary attachment, misleading MIME, origin mismatch, forged approval digest, prompt text that requests authorization, and audit secret redaction.
 
@@ -82,7 +82,7 @@ git commit -m "security: harden automation trust boundaries"
 - Modify: `ISSUES.md`
 - Modify: `docs/APP_REFERENCE.md`
 - Modify: `THIRD_PARTY_NOTICES.md`
-- Modify: source files at non-obvious trust boundaries
+- Modify: source files at nonobvious trust boundaries
 
 **Interfaces:**
 - Produces: exact feature matrix, operator guide, threat model, source ledger, audit instructions, and residual limitations
@@ -114,7 +114,7 @@ rg -n -i "placeholder text|unfinished section|documentation pending" README.md F
 
 Expected: every implemented subsystem is documented, no placeholder language appears, and no AGPL component is listed as shipped code.
 
-- [ ] **Step 4: Run tests and documentation-linked commands**
+- [ ] **Step 4: Run tests and documentation linked commands**
 
 Every command shown in the quick start and verification sections must run successfully in the current checkout.
 
@@ -125,7 +125,7 @@ git add README.md FEATURES.md ISSUES.md docs THIRD_PARTY_NOTICES.md job_pipeline
 git commit -m "docs: document assistant automation and security"
 ```
 
-### Task 3: Run Source, Dependency, License, and Packaged-Artifact Audits
+### Task 3: Run Source, Dependency, License, and Packaged Artifact Audits
 
 **Files:**
 - Create: `docs/audits/2026-08-25-security-audit.md`
@@ -137,19 +137,19 @@ git commit -m "docs: document assistant automation and security"
 
 - [ ] **Step 1: Run dependency and license inventories**
 
-Run production Python and Node audits, `npm ls --all`, package-license inventory, and only-cli dependency review. Record package names, versions, licenses, and advisory identifiers without secrets.
+Run production Python and Node audits, `npm ls --all`, package license inventory, and only-cli dependency review. Record package names, versions, licenses, and advisory identifiers without secrets.
 
 - [ ] **Step 2: Run static security and secret scans**
 
-Scan Python, Electron, React, PowerShell, configuration, Git-tracked files, and the exact outgoing Git diff. Treat fixtures and public provider identifiers as context-sensitive findings rather than automatic leaks.
+Scan Python, Electron, React, PowerShell, configuration, Git tracked files, and the exact outgoing Git diff. Treat fixtures and public provider identifiers as context sensitive findings rather than automatic leaks.
 
 - [ ] **Step 3: Remediate findings with regression tests**
 
 For every code finding, add a failing regression test, confirm it fails, apply the narrow fix, and rerun the focused scanner or test.
 
-- [ ] **Step 4: Re-run the full audit suite**
+- [ ] **Step 4: Rerun the full audit suite**
 
-Expected: no unresolved high or critical production vulnerability, no incompatible shipped license, no secret in the current tree, and all residual lower-severity items explicitly documented.
+Expected: no unresolved high or critical production vulnerability, no incompatible shipped license, no secret in the current tree, and all residual lower severity items explicitly documented.
 
 - [ ] **Step 5: Commit**
 
@@ -175,13 +175,13 @@ Run the Python package build, React production build, Electron tests, and Window
 
 - [ ] **Step 2: Scan the packaged artifact before execution**
 
-Run available antivirus and archive-level scans over the installer and unpacked application. Record hashes and scanner versions in the audit document.
+Run available antivirus and archive level scans over the installer and unpacked application. Record hashes and scanner versions in the audit document.
 
-- [ ] **Step 3: Install per-user and verify delivery**
+- [ ] **Step 3: Install per user and verify delivery**
 
 Confirm the installed executable, application icon, uninstall entry, and Start Menu shortcut. Launch minimized for the first health check and verify only owned child processes start.
 
-- [ ] **Step 4: Run the installed end-to-end acceptance scenario**
+- [ ] **Step 4: Run the installed end to end acceptance scenario**
 
 From a fresh application launch:
 
@@ -192,7 +192,7 @@ From a fresh application launch:
 5. Invoke `web.only_cli.read` against an approved local fixture.
 6. Invoke one original web intelligence extraction tool.
 7. Run one workflow dry run.
-8. Create and execute one due read-only schedule.
+8. Create and execute one due read only schedule.
 9. Prepare one application draft and confirm submission remains blocked without exact approval.
 10. Inspect the sanitized tool and schedule audit history.
 
@@ -206,7 +206,7 @@ git commit -m "build: verify installed Windows release"
 ### Task 5: Finish UI Review and Refresh Control Anything
 
 **Files:**
-- Modify: UI files only for finish-review findings
+- Modify: UI files only for finish review findings
 - Create or update: `DESIGN.md`
 - Update: `.ua/knowledge-graph.json`
 - Update: `.ua/fingerprints.json`
@@ -215,7 +215,7 @@ git commit -m "build: verify installed Windows release"
 **Interfaces:**
 - Produces: final UI verdict, durable design system record, fresh architecture graph, and open user review surfaces
 
-- [ ] **Step 1: Capture desktop and narrow-window screenshots**
+- [ ] **Step 1: Capture desktop and narrow window screenshots**
 
 Capture the Dashboard, Assistant, Automations, Web Workbench, Applications, and approval state in one bounded inspection round.
 
@@ -229,7 +229,7 @@ Run the Impeccable documenter after the final verdict so the file records the im
 
 - [ ] **Step 4: Regenerate and validate Control Anything**
 
-Run the full Understand Anything workflow against the final commit, validate zero structural issues, start the token-protected dashboard, and inspect it for browser console errors.
+Run the full Understand Anything workflow against the final commit, validate zero structural issues, start the token protected dashboard, and inspect it for browser console errors.
 
 - [ ] **Step 5: Open both final review surfaces**
 

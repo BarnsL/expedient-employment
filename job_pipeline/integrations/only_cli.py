@@ -124,6 +124,7 @@ def _resolve_entry(project_root: Path, explicit: Path | None) -> Path:
         project_root / "only-cli-runtime" / "node_modules" / "@only-cli" / "oc" / "src" / "cli.js",
         project_root / "only-cli" / "src" / "cli.js",
         project_root / "resources" / "only-cli" / "src" / "cli.js",
+        Path(__file__).resolve().parents[2] / "only-cli-runtime" / "node_modules" / "@only-cli" / "oc" / "src" / "cli.js",
     ]
     return next(
         (Path(item) for item in candidates if item and Path(item).exists()),
@@ -323,7 +324,7 @@ class OnlyCliAdapter:
                 ToolSpec(
                     name=f"web.only_cli.{command}",
                     description=f"Run only-cli {command} in the application-owned web session.",
-                    policy=ToolPolicy.READ,
+                    policy=ToolPolicy.EXTERNAL_ACTION if command in {'do', 'site'} else ToolPolicy.READ,
                     input_schema=argument_schema,
                     handler=command_handler(command),
                     timeout_seconds=45,
@@ -349,7 +350,7 @@ class OnlyCliAdapter:
             ToolSpec(
                 name="web.only_cli.login",
                 description="Seed an app-owned only-cli session from an explicitly configured credential.",
-                policy=ToolPolicy.LOCAL_WRITE,
+                policy=ToolPolicy.EXTERNAL_ACTION,
                 input_schema={
                     "type": "object",
                     "properties": {
@@ -368,7 +369,7 @@ class OnlyCliAdapter:
             ToolSpec(
                 name="web.only_cli.logout",
                 description="Clear the app-owned only-cli cookies and saved page state.",
-                policy=ToolPolicy.LOCAL_WRITE,
+                policy=ToolPolicy.EXTERNAL_ACTION,
                 input_schema={"type": "object", "additionalProperties": False},
                 handler=command_handler("logout"),
                 timeout_seconds=15,

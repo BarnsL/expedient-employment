@@ -17,7 +17,7 @@ so a release reviewer can trace a feature to its reviewed source revision.
 - Repository: <https://github.com/adeluna1/ai-job-search-pipeline>
 - Reviewed revision: `3962e0a0ecbaad4c6ab618b0113be1a2611073f4`
 - License: MIT
-- Integration method: test-first source port into the canonical Expedient
+- Integration method: test first source port into the canonical Expedient
   history, followed by local security reconciliation.
 
 Imported Python domain modules:
@@ -56,7 +56,7 @@ Imported regression suites:
 - Upstream behavior cases reconciled into `tests/test_pipeline.py`
 
 The Expedient access guard remains authoritative after the port. Board
-timeouts from the upstream project and the local HTTP and human-check
+timeouts from the upstream project and the local HTTP and human check
 classification are both covered by regression tests.
 
 ## only-cli
@@ -65,15 +65,15 @@ classification are both covered by regression tests.
 - Reviewed revision: `7f1f109b8e34dcfc2bfb56122a427f3c467a79ca`
 - Package version: `0.5.0`
 - License: MIT
-- Integration method: Git-revision-pinned production runtime under
+- Integration method: Git revision pinned production runtime under
   `gui/only-cli-runtime`, invoked by the typed Python adapter at
   `job_pipeline/integrations/only_cli.py`.
 
 The shipped runtime is installed with npm optional dependencies omitted. This
-preserves only-cli's implemented read, navigation, site-shortcut, and session
-features while excluding its optional browser-fingerprint transport. The
+preserves only-cli's implemented read, navigation, site shortcut, and session
+features while excluding its optional browser fingerprint transport. The
 adapter exposes only implemented commands, rejects planned form commands,
-keeps state in an application-owned directory, passes login cookies on stdin,
+keeps state in an application owned directory, passes login cookies on stdin,
 caps output and time, and converts access challenges into an explicit browser
 handoff status.
 
@@ -81,20 +81,20 @@ Verification on Windows at integration time:
 
 - Shipped adapter and broker suites: 12 of 12 passing.
 - Full Expedient Python suite is rerun from the final release snapshot.
-- Live adapter smoke checks: site catalog and public-page open both exited 0.
+- Live adapter smoke checks: site catalog and public page open both exited 0.
 - Upstream only-cli suite: 168 of 183 passing. The 15 upstream failures are
-  confined to its POSIX-root test-path construction (`C:\C:\...`) and POSIX
-  permission-bit assertions on Windows. The shipped adapter does not use
+  confined to its POSIX root test path construction (`C:\C:\...`) and POSIX
+  permission bit assertions on Windows. The shipped adapter does not use
   those path builders, and its Windows process path is covered directly.
 
-## Restricted-license references
+## Restricted license references
 
 No source, tests, assets, prompts, schemas, or implementation structure from
-Wigolo or Maxun is incorporated. Their desired user-facing capabilities are
-implemented as original Expedient modules from the public product-level
-requirements recorded in the feature-fusion design specification.
+Wigolo or Maxun is incorporated. Their desired user facing capabilities are
+implemented as original Expedient modules from the public product level
+requirements recorded in the feature fusion design specification.
 
-Original MIT modules created for those product-level capabilities:
+Original MIT modules created for those product level capabilities:
 
 - `job_pipeline/tool_broker.py`
 - `job_pipeline/web_intelligence.py`

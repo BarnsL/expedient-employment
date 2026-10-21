@@ -10,6 +10,7 @@ import subprocess
 import sys
 from copy import deepcopy
 from dataclasses import replace
+from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Iterable
@@ -21,6 +22,7 @@ from .agents import (
     MatchAnalystAgent,
     RecruiterAgent,
     load_application_profile,
+    _parse_posted_datetime,
 )
 from .application_dashboard import collect_application_records, export_application_dashboard
 from .application_history import (
@@ -75,6 +77,7 @@ from .role_scope import (
     partition_by_role_scope,
 )
 from .resume import ResumeError, extract_docx_text, redact_contact_details, resume_context, resume_terms
+from . import autonomy
 from .storage import JobStore
 from .util import canonical_url, configure_logging, load_dotenv, normalize_term, read_json, stable_id, unique_preserving_order, utc_now, write_json, write_json_atomic
 from .webclaw import WebClawClient, WebClawError
@@ -91,7 +94,7 @@ DASHBOARD_OUTCOME_STATUS = {
 
 def project_root() -> Path:
     """Return the folder containing config, data, scripts, and this package."""
-    return Path(__file__).resolve().parent.parent
+    return Path(os.environ.get('EXPEDIENT_PROJECT_ROOT', str(Path(__file__).resolve().parent.parent))).resolve()
 
 
 def load_profile(root: Path) -> dict[str, Any]:
@@ -228,8 +231,11 @@ def ingest_urls(
     ai_extract: bool = False,
     provider: str | None = None,
     model: str | None = None,
+    hours_old: int | None = None,
 ) -> tuple[list[Job], list[tuple[str, str]]]:
     """Scrape URLs concurrently, then persist successful jobs on the main thread."""
+    if hours_old is not None and (type(hours_old) is not int or not 1 <= hours_old <= 8760):
+        raise ValueError('Posting age must be between 1 and 8760 hours')
     clean_urls = unique_preserving_order(canonical_url(url) for url in urls if url.strip())
     jobs: list[Job] = []
     errors: list[tuple[str, str]] = []
@@ -243,6 +249,11 @@ def ingest_urls(
             url = futures[future]
             try:
                 job = future.result()
+                if hours_old is not None:
+                    posted = _parse_posted_datetime(job.posted_date)
+                    if posted is None or not 0 <= (datetime.now(timezone.utc) - posted).total_seconds() <= hours_old * 3600:
+                        errors.append((url, 'Posting date is unconfirmed or outside the requested age window; any saved record was preserved.'))
+                        continue
                 store.upsert_job(job)
                 jobs.append(job)
                 LOGGER.info("Saved %s at %s", job.title, job.company)
@@ -370,16 +381,24 @@ def command_doctor(args: argparse.Namespace, root: Path) -> int:
     print(f"JobSpy runtime: {'installed' if jobspy_python.exists() else 'not installed'}")
     print(f"browser-use runtime: {'installed' if browser_python.exists() else 'not installed'}")
     try:
-        awb = AgentWebBrowserClient(
+        if os.environ.get('EXPEDIENT_BROWSER_DRIVER') == 'llm-browser':
+            from .integrations.llm_browser import LlmBrowserClient
+            state = LlmBrowserClient().status()
+            print('LLM Browser: Crew-managed API ready; browser tier ' + state.get('tier', 'idle'))
+            awb = None
+        else:
+            awb = AgentWebBrowserClient(
             base_url=os.environ.get("AGENT_WEB_BROWSER_URL", "http://127.0.0.1:7896")
-        )
-        if awb.available():
+            )
+        if awb is None:
+            pass
+        elif awb.available():
             awb.status()
             print("Agent Web Browser: running, authenticated, safe read-only mode")
         else:
             print("Agent Web Browser: installed source may be present; local bridge is not running")
-    except AgentWebBrowserError as exc:
-        print(f"Agent Web Browser: unavailable ({exc})")
+    except RuntimeError as exc:
+        print(f"Research browser: unavailable ({exc})")
     matcher_url = os.environ.get("RESUME_MATCHER_URL", "http://127.0.0.1:3000/api/v1")
     print(f"Resume-Matcher URL: {matcher_url} (health is checked only when requested)")
     return 0
@@ -613,6 +632,8 @@ def command_run(args: argparse.Namespace, root: Path) -> int:
     resume_text = _resume_text(args)
     client = _client(root, args)
     search_config = read_json(root / "config" / "searches.json")
+    if getattr(args, 'query', None):
+        search_config = {**search_config, 'queries': [args.query]}
     urls = discover_urls(client, search_config, args.max_jobs)
     if not urls:
         print(
@@ -632,6 +653,7 @@ def command_run(args: argparse.Namespace, root: Path) -> int:
             ai_extract=args.ai_extract,
             provider=args.llm_provider,
             model=args.llm_model,
+            hours_old=getattr(args, 'hours_old', None),
         )
         score_jobs(store, profile, resume_text, client, args.ai, args.llm_provider, args.llm_model)
         paths = _export(store, profile, root, args.min_score)
@@ -2209,6 +2231,55 @@ def command_agent_b(args: argparse.Namespace, root: Path) -> int:
     return 0
 
 
+def _prepare_agent_c_packet(
+    store: JobStore,
+    root: Path,
+    job: Job,
+    review_payload: dict[str, Any],
+    args: argparse.Namespace,
+) -> tuple[Any, MatchAnalysis]:
+    """Build one packet from a verified Agent B handoff and record its lifecycle state."""
+    _, already_applied = partition_previously_applied(
+        [job], root / "data" / "applied_jobs.json"
+    )
+    if already_applied:
+        raise ValueError("Agent C stopped because this role is already in the lifecycle exclusion registry.")
+    analysis_data, handoff = validate_agent_c_handoff(
+        review_payload,
+        job,
+        max_age_hours=args.handoff_max_age_hours,
+    )
+    analysis = MatchAnalysis.from_dict(analysis_data)
+    application_profile = load_application_profile(args.application_profile)
+    draft = ApplicationAgent().prepare(
+        job,
+        analysis,
+        application_profile,
+        args.resume,
+        root / "data" / "application_packets",
+        handoff=handoff,
+    )
+    target_state = "saved" if draft.status == "needs_information" else "ready_to_apply"
+    lifecycle_note = (
+        "Agent C packet is incomplete; reviewed answers are still required."
+        if target_state == "saved"
+        else "Agent C prepared a packet from a verified Agent B handoff."
+    )
+    _transition_application(
+        store,
+        root,
+        job,
+        target_state,
+        lifecycle_note,
+        actor="agent_c",
+        metadata={
+            "handoff_sha256": handoff["handoff_sha256"],
+            "packet_status": draft.status,
+        },
+    )
+    return draft, analysis
+
+
 def command_agent_c(args: argparse.Namespace, root: Path) -> int:
     """Agent C: consume one verified Agent B handoff and prepare a private packet."""
     review_path = args.agent_b_review or (root / "data" / "agent_b_reviews.json")
@@ -2217,44 +2288,7 @@ def command_agent_c(args: argparse.Namespace, root: Path) -> int:
         job = store.job(args.job_id)
         if not job:
             raise ValueError(f"Stored job is required before Agent C can run: {args.job_id}")
-        _, already_applied = partition_previously_applied(
-            [job], root / "data" / "applied_jobs.json"
-        )
-        if already_applied:
-            raise ValueError("Agent C stopped because this role is already in the lifecycle exclusion registry.")
-        analysis_data, handoff = validate_agent_c_handoff(
-            review_payload,
-            job,
-            max_age_hours=args.handoff_max_age_hours,
-        )
-        analysis = MatchAnalysis.from_dict(analysis_data)
-        application_profile = load_application_profile(args.application_profile)
-        draft = ApplicationAgent().prepare(
-            job,
-            analysis,
-            application_profile,
-            args.resume,
-            root / "data" / "application_packets",
-            handoff=handoff,
-        )
-        target_state = "saved" if draft.status == "needs_information" else "ready_to_apply"
-        lifecycle_note = (
-            "Agent C packet is incomplete; reviewed answers are still required."
-            if target_state == "saved"
-            else "Agent C prepared a packet from a verified Agent B handoff; human approval is required."
-        )
-        _transition_application(
-            store,
-            root,
-            job,
-            target_state,
-            lifecycle_note,
-            actor="agent_c",
-            metadata={
-                "handoff_sha256": handoff["handoff_sha256"],
-                "packet_status": draft.status,
-            },
-        )
+        draft, _ = _prepare_agent_c_packet(store, root, job, review_payload, args)
     print(f"Agent C packet status: {draft.status}. Packet: {draft.packet_path}")
     if draft.unresolved_questions:
         print("Missing reviewed answers: " + ", ".join(draft.unresolved_questions))
@@ -2330,6 +2364,131 @@ def command_agent_c_browser(args: argparse.Namespace, root: Path) -> int:
         "Agent C browser run completed. Lifecycle remains 'applying' until a human "
         f"verifies the employer receipt: {result_path}"
     )
+    return 0
+
+
+def _autonomy_paths(root: Path) -> tuple[Path, Path]:
+    return root / "data" / "autonomy_policy.json", root / "data" / "autonomous_submissions.jsonl"
+
+
+def command_autonomy(args: argparse.Namespace, root: Path) -> int:
+    """Enable, disable or show the standing policy for unattended submission."""
+    policy_path, ledger = _autonomy_paths(root)
+    if args.autonomy_command == "enable":
+        policy = autonomy.enable_policy(
+            policy_path,
+            granted_by=args.granted_by,
+            days=args.days,
+            daily_cap=args.daily_cap,
+            min_score=args.min_score,
+            allowed_hosts=args.host or (),
+        )
+        print(
+            f"Autonomy is on until {policy.expires_at}. Cap: {policy.daily_cap} attempts each day. "
+            f"Minimum score: {policy.min_score:g}."
+        )
+        return 0
+    if args.autonomy_command == "disable":
+        changed = autonomy.disable_policy(policy_path)
+        print("Autonomy is off." if changed else "Autonomy was not enabled.")
+        return 0
+    try:
+        policy = autonomy.load_policy(policy_path)
+    except autonomy.AutonomyError as exc:
+        print(f"Autonomy status: {exc}")
+        return 0
+    print(
+        f"Autonomy is on until {policy.expires_at}. Attempts today: "
+        f"{autonomy.attempts_today(ledger)} of {policy.daily_cap}. Minimum score: {policy.min_score:g}."
+    )
+    return 0
+
+
+def command_agent_c_auto(args: argparse.Namespace, root: Path) -> int:
+    """Agent C: prepare and submit every eligible handoff under the standing policy."""
+    policy_path, ledger = _autonomy_paths(root)
+    policy = autonomy.load_policy(policy_path)
+    review_path = args.agent_b_review or (root / "data" / "agent_b_reviews.json")
+    review_payload = read_json(review_path)
+    scores = {
+        str(record.get("job_id")): float(record.get("analysis", {}).get("score") or 0)
+        for record in review_payload.get("records", [])
+    }
+    handoffs = sorted(
+        review_payload.get("agent_c_handoffs", []),
+        key=lambda item: scores.get(str(item.get("job_id")), 0),
+        reverse=True,
+    )
+    submitted = attempted = skipped = 0
+    for handoff in handoffs:
+        if attempted >= args.max_submissions:
+            break
+        job_id = str(handoff.get("job_id") or "")
+        with JobStore(_agent_database(args, root)) as store:
+            job = store.job(job_id)
+            if not job:
+                skipped += 1
+                autonomy.record_attempt(ledger, job_id=job_id, outcome="skipped", reasons=["Job is not stored."])
+                continue
+            try:
+                draft, analysis = _prepare_agent_c_packet(store, root, job, review_payload, args)
+            except ValueError as exc:
+                skipped += 1
+                autonomy.record_attempt(ledger, job_id=job_id, outcome="skipped", reasons=[str(exc)])
+                continue
+        runner = BrowserUseRunner(Path(draft.packet_path))
+        reasons = autonomy.blockers(
+            policy,
+            host=runner.allowed_domain,
+            score=analysis.score,
+            unresolved=list(draft.unresolved_questions),
+            ledger=ledger,
+        )
+        if reasons:
+            skipped += 1
+            autonomy.record_attempt(ledger, job_id=job_id, outcome="skipped", reasons=reasons)
+            LOGGER.info("Autonomous run skipped %s: %s", job_id, "; ".join(reasons))
+            if any("Daily cap" in reason for reason in reasons):
+                break
+            continue
+        if args.dry_run:
+            print(f"Would submit: {job.title} at {job.company} (score {analysis.score:g})")
+            attempted += 1
+            continue
+        approval = root / "data" / "application_approvals" / f"{job_id}.json"
+        autonomy.issue_receipt(
+            policy,
+            policy_path,
+            job_id=runner.job_id,
+            job_url=runner.job_url,
+            packet_sha256=runner.digest,
+            approval_path=approval,
+        )
+        attempted += 1
+        with JobStore(_agent_database(args, root)) as store:
+            _transition_application(
+                store, root, job, "applying", "Autonomous Agent C session started.",
+                actor="agent_c_autonomous", metadata={"policy_sha256": policy.digest},
+            )
+        try:
+            result = runner.execute(approval, "fill_and_submit", model=args.model, max_steps=args.max_steps)
+            outcome = "submitted" if autonomy.confirmed(result.get("result")) else "unconfirmed"
+        except Exception as exc:
+            result, outcome = {"error": str(exc)[:500]}, "failed"
+        write_json(root / "data" / "application_results" / f"{job_id}.json", result)
+        with JobStore(_agent_database(args, root)) as store:
+            _transition_application(
+                store, root, job,
+                "applied" if outcome == "submitted" else "ready_to_apply",
+                "Employer confirmation seen." if outcome == "submitted"
+                else "Autonomous session ended without employer confirmation.",
+                actor="agent_c_autonomous", metadata={"outcome": outcome},
+            )
+        autonomy.record_attempt(ledger, job_id=job_id, outcome=outcome, host=runner.allowed_domain)
+        submitted += outcome == "submitted"
+    verb = "would submit" if args.dry_run else "submitted"
+    print(f"Autonomous Agent C {verb} {submitted if not args.dry_run else attempted} application(s); "
+          f"{skipped} skipped. Ledger: {ledger}")
     return 0
 
 
@@ -2499,6 +2658,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     run = sub.add_parser("run", help="search, scrape, score, and report")
     run.add_argument("--max-jobs", type=int, default=30)
+    run.add_argument("--query", help="one public search query for this run; preserves saved searches")
+    run.add_argument("--hours-old", type=int, help="require a confirmed posting date within this many hours")
     run.add_argument("--concurrency", type=int, default=4)
     run.add_argument("--min-score", type=float, default=0)
     run.add_argument("--output-json", action="store_true", help=argparse.SUPPRESS)
@@ -2692,9 +2853,38 @@ def build_parser() -> argparse.ArgumentParser:
     agent_c_browser.add_argument("--max-steps", type=int, default=40)
     agent_c_browser.set_defaults(handler=command_agent_c_browser)
 
+    autonomy_parser = sub.add_parser("autonomy", help="enable, disable or show unattended submission")
+    autonomy_sub = autonomy_parser.add_subparsers(dest="autonomy_command", required=True)
+    autonomy_enable = autonomy_sub.add_parser("enable", help="grant unattended submission for a limited time")
+    autonomy_enable.add_argument("--granted-by", required=True, help="owner name recorded in the policy")
+    autonomy_enable.add_argument("--days", type=int, default=30)
+    autonomy_enable.add_argument("--daily-cap", type=int, default=10)
+    autonomy_enable.add_argument("--min-score", type=float, default=70)
+    autonomy_enable.add_argument("--host", action="append", help="limit submission to this employer or ATS host")
+    autonomy_sub.add_parser("disable", help="stop unattended submission now")
+    autonomy_sub.add_parser("status", help="show the policy and attempts today")
+    autonomy_parser.set_defaults(handler=command_autonomy)
+
+    agent_c_auto = sub.add_parser(
+        "agent-c-auto", help="prepare and submit eligible applications under the autonomy policy"
+    )
+    agent_c_auto.add_argument("--resume", type=Path, required=True)
+    agent_c_auto.add_argument(
+        "--application-profile", type=Path, default=project_root() / "data" / "application_profile.json"
+    )
+    agent_c_auto.add_argument("--database", type=Path)
+    agent_c_auto.add_argument("--agent-b-review", type=Path)
+    agent_c_auto.add_argument("--handoff-max-age-hours", type=int, default=24)
+    agent_c_auto.add_argument("--max-submissions", type=int, default=5)
+    agent_c_auto.add_argument("--dry-run", action="store_true", help="report eligible jobs without a browser")
+    agent_c_auto.add_argument("--model", default=os.environ.get("BROWSER_USE_MODEL", "gpt-4.1"))
+    agent_c_auto.add_argument("--max-steps", type=int, default=40)
+    agent_c_auto.set_defaults(handler=command_agent_c_auto)
+
     agent_demo = sub.add_parser("agent-demo", help="test Agent A, B, and C offline")
     agent_demo.add_argument("--resume", type=Path)
     agent_demo.set_defaults(handler=command_agent_demo)
+
     return parser
 
 
@@ -2708,6 +2898,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return int(args.handler(args, root))
     except (
+        autonomy.AutonomyError,
         BrowserUseError,
         AgentWebBrowserError,
         DiscoveryError,

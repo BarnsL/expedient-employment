@@ -36,7 +36,7 @@ flowchart LR
 | Agent | Input | Local command | Output | External authority |
 |---|---|---|---|---|
 | A | Search objective and corrected resume | `agent-a-find`, then `agent-a` | Verified active employer URLs plus board/fallback diagnostics | Public discovery and verification only |
-| B | Agent A verified job IDs | verified-only score; `agent-b`; optional Resume-Matcher | `apply`, `review`, or `skip` with deterministic and optional ATS evidence | Resume upload only after explicit service consent |
-| C | Agent B `apply` IDs and reviewed candidate profile | `agent-c`, then `agent-c-browser` | Private packet, hash-bound receipt, plan, and verified outcome | Only after accepted confirmation for exact packet/action |
+| B | Agent A verified job IDs | verified only score; `agent-b`; optional Resume-Matcher | `apply`, `review`, or `skip` with deterministic and optional ATS evidence | Resume upload only after explicit service consent |
+| C | Agent B `apply` IDs and reviewed candidate profile | `agent-c`, then `agent-c-browser` | Private packet, hash bound receipt, plan, and verified outcome | Only after accepted confirmation for exact packet/action |
 
 The agents are provisioned paused. This prevents assignments from starting model runs or external actions until the board user reviews the configuration and explicitly resumes the relevant agent.

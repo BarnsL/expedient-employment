@@ -1,0 +1,44 @@
+@import "tailwindcss/theme.css";
+@import "tailwindcss/utilities.css";
+@source "../";
+
+@theme {
+  --color-border: var(--border);
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --color-muted: var(--muted);
+  --color-primary: var(--accent);
+  --color-card: var(--card);
+}
+
+.expedient-crew { height: 100%; min-height: 620px; color: var(--text); background: var(--bg); font: 14px/1.5 var(--font-body,system-ui,sans-serif); isolation: isolate; }
+.expedient-crew *, .expedient-crew *::before, .expedient-crew *::after { box-sizing: border-box; border-color: var(--border); }
+.expedient-crew > .flex { height: 100%; min-height: 620px; }
+.expedient-crew [class*="bg-slate-9"] { background-color: var(--card) !important; }
+.expedient-crew .bg-slate-950 { background-color: var(--bg) !important; }
+.expedient-crew [class*="bg-slate-8"], .expedient-crew [class*="bg-slate-7"] { background-color: color-mix(in srgb,var(--text) 5%,var(--card)) !important; }
+.expedient-crew [class*="text-slate-1"], .expedient-crew [class*="text-slate-2"], .expedient-crew [class*="text-slate-3"] { color: var(--text) !important; }
+.expedient-crew [class*="text-slate-4"], .expedient-crew [class*="text-slate-5"], .expedient-crew [class*="text-slate-6"] { color: var(--muted) !important; }
+.expedient-crew [class*="border-slate"] { border-color: var(--border) !important; }
+.expedient-crew [class*="text-cyan"] { color: var(--accent) !important; }
+.expedient-crew [class*="bg-cyan-5"] { background-color: var(--accent) !important; color: var(--accent-fg,#fff) !important; }
+.expedient-crew [class*="bg-cyan-500/"], .expedient-crew [class*="bg-cyan-9"] { background-color: color-mix(in srgb,var(--accent) 12%,var(--card)) !important; color: var(--accent) !important; }
+.expedient-crew [class*="text-rose"], .expedient-crew [class*="text-red"] { color: var(--danger,#c74343) !important; }
+.expedient-crew [class*="text-emerald"] { color: var(--ok,#26916d) !important; }
+.expedient-crew input, .expedient-crew select, .expedient-crew textarea { color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }
+.expedient-crew input::placeholder, .expedient-crew textarea::placeholder { color: var(--muted); opacity: 1; }
+.expedient-crew :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.expedient-crew ::selection { background: var(--accent); color: var(--accent-fg,#fff); }
+.expedient-crew button, .expedient-crew a { min-height: 32px; }
+.expedient-crew button { font: inherit; border: 1px solid var(--border); background-color: transparent; color: inherit; cursor: pointer; }
+.expedient-crew nav button { border: 0; }
+/* The bg-slate-8 override above also matches the hover:bg-slate-800 class, so keep idle nav buttons clear. */
+.expedient-crew nav button:not(:hover):not([class*="bg-cyan"]) { background-color: transparent !important; }
+.expedient-crew .bg-primary { background-color: var(--accent) !important; color: var(--accent-fg,#fff) !important; }
+.expedient-crew .text-primary-foreground { color: var(--accent-fg,#fff) !important; }
+.expedient-crew button:disabled { cursor: not-allowed; opacity: .55; }
+.expedient-crew pre { font-size: 12px; line-height: 1.6; }
+.expedient-crew main { min-width: 0; }
+.expedient-crew h1 { font-size: 26px; line-height: 1.25; }
+.expedient-crew .h-screen { height: 100% !important; }
+@media(max-width:700px) { .expedient-crew aside { width: 64px; } .expedient-crew main { padding: 16px; } .expedient-crew button { min-height: 40px; } }

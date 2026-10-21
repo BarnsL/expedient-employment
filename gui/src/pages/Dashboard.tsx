@@ -3,7 +3,7 @@ import { Power, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { api, isDesktop } from '@/lib/api';
+import { api, isDesktop, isCrew } from '@/lib/api';
 import type { DoctorResult, ServicesMap, SessionsResult, StartableService } from '@/lib/api';
 
 function StatusDot({ up }: { up: boolean }) {
@@ -19,7 +19,7 @@ function serviceFromDoctor(doctorText: string, key: string): { found: boolean; o
     .split('\n')
     .find((l) => l.toLowerCase().includes(key.toLowerCase()));
   if (!line) return { found: false, ok: false };
-  return { found: true, ok: !/fail|missing|error|not found/i.test(line) };
+  return { found: true, ok: !/fail|missing|error|not found|not configured|not installed|not running|unavailable|no .*key/i.test(line) };
 }
 
 export default function Dashboard() {
@@ -110,14 +110,14 @@ export default function Dashboard() {
           up={webclaw ? (webclaw.found && webclaw.ok) : null}
         />
         <ServiceTile
-          title="Serper"
-          subtitle="search API key (via doctor)"
+          title={isCrew ? 'Optional search API' : 'Serper'}
+          subtitle={isCrew ? 'Public discovery also works without a search key' : 'search API key (via doctor)'}
           up={serper ? (serper.found && serper.ok) : null}
         />
         <ServiceTile
-          title="AWB bridge"
+          title={isCrew ? 'LLM Browser' : 'AWB bridge'}
           subtitle={
-            services?.awb.up
+            isCrew ? String(services?.awb.raw || 'Checking managed browser') : services?.awb.up
               ? services.awb.isBridge
                 ? 'Agent Web Browser on :7896'
                 : `port 7896 serves "${services.awb.app ?? 'unknown'}"`

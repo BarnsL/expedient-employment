@@ -13,7 +13,7 @@ from typing import Any, Callable
 
 from .career import review_resume, prepare_interview, check_draft
 from .tool_broker import ToolContext, ToolPolicy, ToolResult, ToolSpec
-from .util import redact_secrets
+from .util import redact_secrets, write_json
 
 
 Runner = Callable[..., subprocess.CompletedProcess[str]]
@@ -22,6 +22,8 @@ CONTROL_PROVIDER_ENV_KEYS = {
     "EXPEDIENT_PROVIDER_URL",
     "EXPEDIENT_PROVIDER_KEY_ENV",
     "FREECHAIN_ACCESS_KEY",
+    "CODEXCREW_PROXY_SECRET",
+    "KIROCREW_PROXY_SECRET",
 }
 
 
@@ -70,9 +72,12 @@ class JobPipelineToolAdapter:
             if key.upper() not in blocked
         }
         child_environment.update({
-            "PYTHONPATH": str(self.project_root),
+            "PYTHONPATH": str(Path(__file__).resolve().parent.parent),
+            "EXPEDIENT_PROJECT_ROOT": str(self.project_root),
             "PYTHONUNBUFFERED": "1",
         })
+        if os.environ.get('CODEXCREW_APP_NAME') == 'expedient-employment':
+            child_environment['EXPEDIENT_BROWSER_DRIVER'] = 'llm-browser'
         try:
             completed = self.runner(
                 arguments,
@@ -85,6 +90,7 @@ class JobPipelineToolAdapter:
                 errors="replace",
                 timeout=max(1.0, min(float(timeout_seconds), 900.0)),
                 check=False,
+                creationflags=(subprocess.CREATE_NO_WINDOW | subprocess.BELOW_NORMAL_PRIORITY_CLASS) if os.name == 'nt' else 0,
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise RuntimeError(f"Job pipeline command could not complete: {exc}") from exc

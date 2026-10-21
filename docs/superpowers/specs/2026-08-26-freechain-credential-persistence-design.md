@@ -17,8 +17,8 @@ Electron owns credential persistence because its `safeStorage` API uses the curr
 1. Load and decrypt an existing ciphertext record from Electron `userData`.
 2. On first launch only, import `FREECHAIN_ACCESS_KEY` from the process environment, an explicitly configured env file, or the allowlisted installed FreeChain env file.
 3. Encrypt the value before an atomic write. The record contains version, provider, ciphertext, and update time, never plaintext.
-4. Return the decrypted value only to Electron main-process memory.
-5. Support status, re-import, and clear operations without returning secret material to the renderer.
+4. Return the decrypted value only to Electron main process memory.
+5. Support status, reimport, and clear operations without returning secret material to the renderer.
 
 Electron passes the decrypted value only in the environment of the Python control child. It also sets the installed FreeChain endpoint and credential environment name. No key is placed in command arguments, logs, IPC responses, transcripts, SQLite, source files, or Git.
 
@@ -26,14 +26,14 @@ Electron passes the decrypted value only in the environment of the Python contro
 
 `OpenAICompatibleProvider.readiness()` will require both credential configuration and a successful authenticated model probe. It will return a safe detail string for missing credentials, unreachable service, authorization failure, malformed response, or readiness. `models()` will perform its request directly so readiness does not recurse.
 
-The Assistant UI will show the backend readiness result. A model request failure will no longer silently create a fake one-model ready state. The UI will also expose encrypted credential status with re-import and clear actions plus a shared-device warning.
+The Assistant UI will show the backend readiness result. A model request failure will no longer silently create a fake one model ready state. The UI will also expose encrypted credential status with reimport and clear actions plus a shared device warning.
 
 ## Lifecycle and recovery
 
 - First approved launch imports and encrypts the installed FreeChain key.
 - Later launches decrypt the saved record with Windows user protection.
 - Clearing the key deletes the encrypted record and restarts the owned control service without a credential.
-- Re-import replaces the encrypted record and restarts the owned control service.
+- Reimport replaces the encrypted record and restarts the owned control service.
 - A corrupt or undecryptable record is treated as unavailable. The app may import an allowlisted source again, but never surfaces ciphertext or parser details to the renderer.
 
 ## Security boundaries
@@ -42,11 +42,11 @@ The Assistant UI will show the backend readiness result. A model request failure
 - Env files must be regular files within a small size cap.
 - Renderer IPC receives booleans and safe source labels only.
 - Errors redact network response bodies and credentials.
-- Sensitive actions that submit applications or contact employers remain approval-gated.
-- The design does not add scraping concealment, CAPTCHA bypass, or anti-bot evasion.
+- Sensitive actions that submit applications or contact employers remain approval gated.
+- The design does not add scraping concealment, CAPTCHA bypass, or antibot evasion.
 
 ## Verification
 
-Automated tests will cover encryption-only storage, two-instance restart loading, corrupt data, allowlisted import, clear/re-import, child environment injection, and live provider readiness failure/success. Full Python, Electron, React, lint, and production builds must pass.
+Automated tests will cover encryption only storage, two instance restart loading, corrupt data, allowlisted import, clear/reimport, child environment injection, and live provider readiness failure/success. Full Python, Electron, React, lint, and production builds must pass.
 
 Installed acceptance must prove two fresh conversations succeed across an app close and relaunch. Release checks must confirm the plaintext key is absent from the tracked tree, outgoing Git range, release archive, installer payload, Electron user data files, assistant database, and transcript output.

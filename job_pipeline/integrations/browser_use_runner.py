@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+from ..autonomy import AutonomyError, verify_policy_receipt
 from ..util import read_json, utc_now, write_json
 
 
@@ -172,6 +173,10 @@ class BrowserUseRunner:
                 expiry = expiry.replace(tzinfo=timezone.utc)
             if expiry.astimezone(timezone.utc) <= datetime.now(timezone.utc):
                 raise BrowserUseError("Application approval has expired.")
+        try:
+            verify_policy_receipt(receipt)
+        except AutonomyError as exc:
+            raise BrowserUseError(str(exc)) from exc
         return receipt
 
     def packet_blockers(self, requested_action: str) -> list[str]:
@@ -196,7 +201,7 @@ class BrowserUseRunner:
         receipt = self._validate_approval(approval_path, requested_action)
         candidate = self.packet.get("candidate", {})
         resume_path = Path(str(candidate.get("resume_path") or ""))
-        if not resume_path.exists():
+        if candidate.get("resume_required", True) and not resume_path.exists():
             raise BrowserUseError("The approved packet's resume file is unavailable.")
         return receipt
 
@@ -242,6 +247,7 @@ For demographic, criminal-history, or any unknown/ambiguous question, stop and r
 Do not bypass CAPTCHA, bot detection, access controls, or site terms.
 {submit_instruction}
 Return a concise list of fields filled, unresolved questions, the final URL, and whether submission occurred.
+End with one line: SUBMISSION_CONFIRMED: yes, only when the employer shows a confirmation; otherwise SUBMISSION_CONFIRMED: no.
 """
 
     @staticmethod
@@ -263,19 +269,29 @@ Return a concise list of fields filled, unresolved questions, the final URL, and
         """Run browser-use only after exact packet/action approval is validated."""
         self.validate_execution(approval_path, requested_action)
         candidate = self.packet.get("candidate", {})
-        resume_path = Path(str(candidate.get("resume_path") or ""))
+        resume_value = str(candidate.get("resume_path") or "").strip()
+        resume_path = Path(resume_value) if resume_value else None
         try:
             from browser_use import Agent, BrowserProfile, ChatOpenAI, Tools
         except ImportError as exc:
             raise BrowserUseError(
                 "browser-use is not installed. Run scripts/install-agent-integrations.ps1 -BrowserUse."
             ) from exc
+        catalog = self.packet.get("form_answer_catalog")
+        if not isinstance(catalog, dict):
+            catalog = build_form_answer_catalog(candidate)
         secure_values = {
             key: str(value)
-            for key, value in build_form_answer_catalog(candidate)["known_fields"].items()
+            for key, value in catalog["known_fields"].items()
             if value not in (None, "")
         }
-        secure_values["resume_path"] = str(resume_path.resolve())
+        available_files: list[str] = []
+        if resume_path is not None and resume_path.exists():
+            secure_values["resume_path"] = str(resume_path.resolve())
+            available_files.append(str(resume_path.resolve()))
+        for raw_path in candidate.get("upload_paths", []):
+            if str(raw_path).strip():
+                available_files.append(str(Path(str(raw_path)).resolve()))
         profile = BrowserProfile(
             allowed_domains=[self.allowed_domain],
             headless=False,
@@ -290,7 +306,7 @@ Return a concise list of fields filled, unresolved questions, the final URL, and
             browser_profile=profile,
             tools=tools,
             sensitive_data={self.allowed_domain: secure_values},
-            available_file_paths=[str(resume_path.resolve())],
+            available_file_paths=available_files,
             max_actions_per_step=1,
             use_judge=True,
         )

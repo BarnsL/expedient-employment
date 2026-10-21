@@ -7,7 +7,7 @@
 
    `./scripts/agent-run.cmd agent-a-find --query "Recruiting Coordinator" --location "United States" --hours-old 168 --results-wanted 10 --resume "$env:JOB_PIPELINE_RESUME"`
 
-5. Read `data/agent_a_discovery.json`. Record each board's attempt count/status, open circuit breakers, WebClaw fallback status, Agent Web Browser availability/use, employer-URL resolutions, verification errors, and `verified_active_count`. Do not run a second board search: `agent-a-find` already performs the authorized fallback and active-page gate.
+5. Read `data/agent_a_discovery.json`. Record each board's attempt count/status, open circuit breakers, WebClaw fallback status, Agent Web Browser availability/use, employer URL resolutions, verification errors, and `verified_active_count`. Do not run a second board search: `agent-a-find` already performs the authorized fallback and active page gate.
 
 6. If discovery was separate from triage, run:
 

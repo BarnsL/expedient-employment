@@ -15,6 +15,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from job_pipeline import autonomy
 from job_pipeline.agents import ApplicationAgent, MatchAnalystAgent, RecruiterAgent
 from job_pipeline.application_history import (
     partition_previously_applied,
@@ -35,6 +36,7 @@ from job_pipeline.cli import (
     _transition_application,
     command_agent_b,
     command_agent_c,
+    command_agent_c_auto,
     score_verified_jobs,
 )
 from job_pipeline.handoff import build_agent_c_handoff, validate_agent_c_handoff
@@ -2135,6 +2137,65 @@ class PipelineTests(unittest.TestCase):
         self.assertIn("contact.phone", incomplete_packet["unresolved_questions"])
         self.assertEqual(state["status"], "saved")
         self.assertEqual(events[-1]["actor"], "agent_c")
+
+    def test_autonomous_agent_c_submits_only_with_policy_and_confirmation(self) -> None:
+        """Run the unattended path end to end with a mocked browser session."""
+        now = datetime.now(timezone.utc)
+        job = job_from_fixture(self.fixtures[0])
+        match = score_job(job, self.profile)
+        finding = RecruiterAgent().inspect(job, fresh_days=30)
+        analysis = MatchAnalystAgent().analyze(job, match, finding, threshold=72, fresh_days=30).to_dict()
+        analysis.update({
+            "recommendation": "apply", "live_verified": True, "direct_domain_verified": True,
+            "verification_url": job.url, "verified_at": now.isoformat(),
+            "freshness": {"fresh": True, "freshness_window_hours": 168},
+        })
+        record = {"job_id": job.id, "title": job.title, "company": job.company, "url": job.url,
+                  "geography_eligible": True, "analysis": analysis}
+        handoff = build_agent_c_handoff(record, created_at=now.isoformat())
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            database = root / "jobs.sqlite3"
+            review = root / "reviews.json"
+            application_profile = root / "application_profile.json"
+            with JobStore(database) as store:
+                store.upsert_job(job)
+                store.upsert_match(match)
+            write_json(review, {"schema_version": 2, "records": [record], "agent_c_handoffs": [handoff]})
+            write_json(application_profile, {
+                "contact": {"first_name": "Demo", "last_name": "Candidate",
+                            "email": "demo" + chr(64) + "example.test", "phone": "555-0100",
+                            "city": "San Jose", "state": "CA", "country": "United States"},
+                "links": {}, "eligibility": {"authorized_to_work_us": True, "requires_sponsorship": False},
+                "preferences": {}, "standard_answers": {},
+                "consents": {"use_contact_for_applications": True},
+            })
+            args = SimpleNamespace(
+                database=database, agent_b_review=review, handoff_max_age_hours=24,
+                application_profile=application_profile, resume=ROOT / "README.md",
+                max_submissions=5, dry_run=False, model="fixture", max_steps=5,
+            )
+            with self.assertRaises(autonomy.AutonomyError):
+                command_agent_c_auto(args, root)
+            autonomy.enable_policy(root / "data" / "autonomy_policy.json",
+                                   granted_by="Owner", days=7, daily_cap=3, min_score=0)
+            result = {"result": "Submitted.\nSUBMISSION_CONFIRMED: no"}
+            with patch.object(BrowserUseRunner, "execute", return_value=result) as execute:
+                self.assertEqual(command_agent_c_auto(args, root), 0)
+            self.assertEqual(execute.call_args.args[1], "fill_and_submit")
+            with JobStore(database) as store:
+                self.assertEqual(store.application_state(job.id)["status"], "ready_to_apply")
+            result = {"result": "Done.\nSUBMISSION_CONFIRMED: yes"}
+            with patch.object(BrowserUseRunner, "execute", return_value=result):
+                self.assertEqual(command_agent_c_auto(args, root), 0)
+            with JobStore(database) as store:
+                state = store.application_state(job.id)
+            receipt = json.loads((root / "data" / "application_approvals" / f"{job.id}.json").read_text())
+            ledger = [json.loads(line) for line in
+                      (root / "data" / "autonomous_submissions.jsonl").read_text().splitlines()]
+        self.assertEqual(state["status"], "applied")
+        self.assertTrue(receipt["approved_by"].startswith("autonomy_policy:"))
+        self.assertEqual([row["outcome"] for row in ledger], ["unconfirmed", "submitted"])
 
     def test_tailoring_plan_separates_supported_and_unsupported_keywords(self) -> None:
         """Use resume evidence for tailoring and quarantine unsupported ATS suggestions."""

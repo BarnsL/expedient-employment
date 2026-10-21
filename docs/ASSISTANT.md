@@ -8,8 +8,8 @@ The Connection Assistant is a durable control surface, not a transient chat box.
 - readiness and credential indicators;
 - new conversations and transcript clearing;
 - queued messages;
-- queued-message editing and cancellation;
-- assistant-response retry;
+- queued message editing and cancellation;
+- assistant response retry;
 - local image attachments;
 - tool request, completion, failure, and handoff events;
 - automated queue draining while the page is open.
@@ -46,7 +46,7 @@ Images are not sent to a provider unless that message opts in to image upload. W
 
 ## Provider configuration
 
-OpenAI-compatible providers must use HTTPS unless they are loopback services. URL credentials are rejected. Remote credentials are read from a validated environment-variable name and never returned through the UI API.
+OpenAI compatible providers must use HTTPS unless they are loopback services. URL credentials are rejected. Remote credentials are read from a validated environment variable name and never returned through the UI API.
 
 The provider transport limits request duration and response size. Provider errors pass through secret redaction before they are stored or displayed.
 
@@ -54,13 +54,13 @@ The provider transport limits request duration and response size. Provider error
 
 The installed FreeChain contract uses `http://127.0.0.1:4853/v1` with bearer authentication. The assistant never displays, logs, or documents a credential value.
 
-On first use, the desktop checks sources in this order: an existing encrypted record, the process `FREECHAIN_ACCESS_KEY`, an explicitly configured environment file, then the allowlisted per-user FreeChain environment file. A valid first source stops the search.
+On first use, the desktop checks sources in this order: an existing encrypted record, the process `FREECHAIN_ACCESS_KEY`, an explicitly configured environment file, then the allowlisted per user FreeChain environment file. A valid first source stops the search.
 
-Manual re-import does not use the encrypted record as a replacement candidate. It checks only the process `FREECHAIN_ACCESS_KEY`, the explicitly configured environment file, then the allowlisted per-user FreeChain environment file. A valid first source replaces the saved encrypted record only after a successful protected write. When no valid replacement exists or replacement persistence fails, the prior encrypted credential remains visible and clearable. With no prior credential, status remains unavailable.
+Manual reimport does not use the encrypted record as a replacement candidate. It checks only the process `FREECHAIN_ACCESS_KEY`, the explicitly configured environment file, then the allowlisted per user FreeChain environment file. A valid first source replaces the saved encrypted record only after a successful protected write. When no valid replacement exists or replacement persistence fails, the prior encrypted credential remains visible and clearable. With no prior credential, status remains unavailable.
 
-Electron `safeStorage` uses the current Windows user protection boundary. Electron user data contains ciphertext only. Plaintext is limited to Electron main-process memory and the environment of the Python control child owned by the application. Job-pipeline subprocesses explicitly remove the control provider environment and credential before launch. Provider response content and tool arguments have the active credential removed before execution or transcript persistence.
+Electron `safeStorage` uses the current Windows user protection boundary. Electron user data contains ciphertext only. Plaintext is limited to Electron main process memory and the environment of the Python control child owned by the application. Job pipeline subprocesses explicitly remove the control provider environment and credential before launch. Provider response content and tool arguments have the active credential removed before execution or transcript persistence.
 
-Clear removes the encrypted record only when deletion succeeds or the record is already absent. A deletion failure leaves the existing state intact, does not report success, and does not restart a service. The current IPC handler restarts only the application-owned control service after every manual re-import attempt, including when no candidate exists or protected persistence fails. It restarts after clear only when clear succeeds. These operations do not alter unrelated processes.
+Clear removes the encrypted record only when deletion succeeds or the record is already absent. A deletion failure leaves the existing state intact, does not report success, and does not restart a service. The current IPC handler restarts only the application owned control service after every manual reimport attempt, including when no candidate exists or protected persistence fails. It restarts after clear only when clear succeeds. These operations do not alter unrelated processes.
 
 If another person will use the same Windows account, clear the saved key first.
 
@@ -70,17 +70,17 @@ The Assistant presents these states without inventing a model:
 
 | State | Meaning and recovery |
 | --- | --- |
-| Credential missing | Re-import a local key, then refresh readiness. |
+| Credential missing | Reimport a local key, then refresh readiness. |
 | Service unreachable | Start or reconnect the local service, then refresh readiness. |
-| Authentication failed | Re-import the local key, then refresh readiness. |
+| Authentication failed | Reimport the local key, then refresh readiness. |
 | Invalid model response | Recover the provider, then refresh readiness. |
 | Ready | Authentication and a model probe succeeded, and the displayed count is the real model count. |
 
-The earlier chat failure came from targeting port 8000 without the required credential while the installed service uses port 4853 with bearer authentication. The prior interface also masked failed model loading by presenting a fake `auto` state. The current interface keeps model-dependent actions unavailable until readiness and a real model list recover.
+The earlier chat failure came from targeting port 8000 without the required credential while the installed service uses port 4853 with bearer authentication. The prior interface also masked failed model loading by presenting a fake `auto` state. The current interface keeps model dependent actions unavailable until readiness and a real model list recover.
 
-When an advertised `auto` completion fails, the provider makes one authenticated model-list request and tries at most four advertised concrete recovery models. Preview and stealth routes are excluded from automatic selection. A working recovery model is cached for the current provider process so later tool rounds do not repeat the failed route.
+When an advertised `auto` completion fails, the provider makes one authenticated model list request and tries at most four advertised concrete recovery models. Preview and stealth routes are excluded from automatic selection. A working recovery model is cached for the current provider process so later tool rounds do not repeat the failed route.
 
-Committed unit, React, Electron, lint, and build checks cover the documented contracts. Installed acceptance also proves an exact automatic-fallback response and an exact post-restart response while the original credential import file is unavailable. The protected record remains the only credential source during that restart.
+Committed unit, React, Electron, lint, and build checks cover the documented contracts. Installed acceptance also proves an exact automatic fallback response and an exact post restart response while the original credential import file is unavailable. The protected record remains the only credential source during that restart.
 
 ## Queue controls
 
@@ -89,4 +89,4 @@ Committed unit, React, Electron, lint, and build checks cover the documented con
 - **Retry** creates a new queued request linked to the failed or completed assistant turn.
 - **Clear transcript** removes messages from the selected conversation after confirmation in the UI.
 
-Tool event history remains content-free and can be used for operational debugging without exposing the transcript.
+Tool event history remains content free and can be used for operational debugging without exposing the transcript.

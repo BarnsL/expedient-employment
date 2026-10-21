@@ -7,6 +7,7 @@ import binascii
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import urllib.error
@@ -16,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from .integrations.only_cli import OnlyCliAdapter, OnlyCliError
+from .integrations.llm_browser import LlmBrowserClient, LlmBrowserError
 from .util import canonical_url, redact_secrets
 from .web_intelligence import SafeUrlPolicy, UnsafeUrlError
 
@@ -135,6 +137,11 @@ class WebClawClient:
         if parts.scheme not in {"http", "https"} or not parts.hostname:
             return ""
         if parts.username or parts.password:
+            return ""
+        host = parts.hostname.casefold()
+        if host.endswith('.apply.careers.microsoft.com'):
+            return ""
+        if host == 'apply.careers.microsoft.com' and not re.fullmatch(r'/careers/job/[^/]+/?', parts.path, flags=re.IGNORECASE):
             return ""
         if (
             parts.hostname.casefold().endswith("linkedin.com")
@@ -382,6 +389,11 @@ class WebClawClient:
     def scrape(self, url: str) -> dict[str, Any]:
         """Extract one public page into WebClaw's JSON metadata/content structure."""
         self._validate_page_url(url)
+        if os.environ.get('EXPEDIENT_BROWSER_DRIVER') == 'llm-browser':
+            try:
+                return LlmBrowserClient().scrape(url)
+            except LlmBrowserError as error:
+                raise WebClawError(str(error)) from error
         tavily_key = os.environ.get("TAVILY_API_KEY", "").strip()
         if tavily_key:
             request = urllib.request.Request(

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Power, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { api, isDesktop } from '@/lib/api';
+import { api, isDesktop, isCrew } from '@/lib/api';
 import type { ServicesMap, StartableService } from '@/lib/api';
 
 const OUTLINE_BTN =
@@ -79,7 +79,12 @@ export default function ServiceEmbed({
       </div>
 
       {up ? (
-        isDesktop ? (
+        isCrew ? (
+          <Card className="border-slate-800 bg-slate-900/60"><CardContent className="p-6">
+            <p className="text-sm text-slate-300">{title} is available as an optional connected service.</p>
+            <a href={url} target="_blank" rel="noopener noreferrer" className="text-sm text-cyan-300 underline">Open {title}</a>
+          </CardContent></Card>
+        ) : isDesktop ? (
           <Card className="min-h-0 flex-1 border-slate-800 bg-slate-900/60">
             <CardContent className="h-full p-0">
               <webview src={url} partition={partition} className="h-full w-full" />

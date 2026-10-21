@@ -1,19 +1,19 @@
 # Pipeline Fusion Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Port every nonconflicting Adeluna pipeline feature into the current Expedient Employment Python core and application lifecycle UI.
 
 **Architecture:** Keep Expedient Employment as the canonical history, copy MIT modules only after their tests fail against the current tree, and reconcile overlapping files at existing domain boundaries. SQLite remains the system of record and external application actions remain bound to exact approvals.
 
-**Tech Stack:** Python 3.10+, standard-library `unittest`, `sqlite3`, Electron, React 19, TypeScript 5.9
+**Tech Stack:** Python 3.10+, standard library `unittest`, `sqlite3`, Electron, React 19, TypeScript 5.9
 
 ## Global Constraints
 
 - Preserve the current CLI, Paperclip roles, provider adapters, and packaging behavior.
 - Preserve MIT notices and record each imported Adeluna file in `docs/PROVENANCE.md`.
 - Never copy Wigolo or Maxun implementation material in this plan.
-- Never weaken freshness, verification, approval, or unresolved-field gates to satisfy a test.
+- Never weaken freshness, verification, approval, or unresolved field gates to satisfy a test.
 - Each production change begins with a focused failing test and ends with the relevant full suite.
 
 ---
@@ -26,7 +26,7 @@
 
 **Interfaces:**
 - Consumes: `MatchAnalystAgent.analyze(..., now: datetime | None)`
-- Produces: a fixed `self.analysis_now` shared by time-sensitive test calls
+- Produces: a fixed `self.analysis_now` shared by time sensitive test calls
 
 - [ ] **Step 1: Change one failing test to pass an explicit clock**
 
@@ -52,7 +52,7 @@ Expected before the edit: FAIL because the fixture date is older than 30 days re
 
 - [ ] **Step 3: Apply the fixed clock to all three affected analyses**
 
-Pass `now=self.analysis_now` to the low ATS preview, Resume Matcher outage, and three-specialist contract tests. Do not change `MatchAnalystAgent` freshness behavior.
+Pass `now=self.analysis_now` to the low ATS preview, Resume Matcher outage, and three specialist contract tests. Do not change `MatchAnalystAgent` freshness behavior.
 
 - [ ] **Step 4: Run the full current suite**
 
@@ -99,7 +99,7 @@ Expected: FAIL with missing `job_pipeline` modules or missing exported functions
 
 - [ ] **Step 3: Copy and reconcile the nine MIT modules**
 
-Use the reviewed Adeluna revision recorded in `docs/PROVENANCE.md`. Keep each module's public signatures unchanged so the upstream tests remain meaningful. Replace any project-root assumptions with current `JobStore` and utility interfaces only where required.
+Use the reviewed Adeluna revision recorded in `docs/PROVENANCE.md`. Keep each module's public signatures unchanged so the upstream tests remain meaningful. Replace any project root assumptions with current `JobStore` and utility interfaces only where required.
 
 - [ ] **Step 4: Run the focused ported suite**
 
@@ -130,10 +130,10 @@ git commit -m "feat: port MIT pipeline domain features"
 - Modify: `tests/test_pipeline.py`
 
 **Interfaces:**
-- Produces: current-run isolation, atomic JSON writes, failure categories, bounded discovery caps, direct ATS discovery, lifecycle persistence, outcome updates, and candidate audit exports
-- Preserves: existing `DiscoveryProvider`, `BrowserUseRunner`, `JobStore`, CLI commands, and provider-specific access policy
+- Produces: current run isolation, atomic JSON writes, failure categories, bounded discovery caps, direct ATS discovery, lifecycle persistence, outcome updates, and candidate audit exports
+- Preserves: existing `DiscoveryProvider`, `BrowserUseRunner`, `JobStore`, CLI commands, and provider specific access policy
 
-- [ ] **Step 1: Add the upstream regression methods before shared-file changes**
+- [ ] **Step 1: Add the upstream regression methods before shared file changes**
 
 Port tests that cover run isolation, provider timeout behavior, board caching, direct ATS discovery, deduplication, liveness classification, application outcome synchronization, and candidate audit output.
 

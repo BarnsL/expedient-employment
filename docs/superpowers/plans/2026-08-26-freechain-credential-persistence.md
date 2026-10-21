@@ -17,8 +17,8 @@ Files:
 
 Steps:
 
-1. Add Electron tests proving imported plaintext is encrypted before persistence, a new store instance can decrypt it, corrupt ciphertext fails closed, clear removes it, re-import replaces it, and returned status contains no key.
-2. Add a control-service test proving only the supplied provider environment reaches the owned Python child and never appears in public status.
+1. Add Electron tests proving imported plaintext is encrypted before persistence, a new store instance can decrypt it, corrupt ciphertext fails closed, clear removes it, reimport replaces it, and returned status contains no key.
+2. Add a control service test proving only the supplied provider environment reaches the owned Python child and never appears in public status.
 3. Add Python tests proving missing credentials, refused connections, unauthorized responses, and malformed model lists are not ready, while a valid authenticated model list is ready.
 4. Add a service composition test for the FreeChain default URL and credential environment.
 5. Run the focused test commands and record the expected failures:
@@ -35,10 +35,10 @@ Files:
 
 Steps:
 
-1. Implement bounded env parsing, allowlisted import paths, versioned ciphertext persistence, atomic writes, decrypt, status, clear, and re-import.
+1. Implement bounded env parsing, allowlisted import paths, versioned ciphertext persistence, atomic writes, decrypt, status, clear, and reimport.
 2. Initialize the store only after Electron is ready, using `safeStorage` and `app.getPath('userData')`.
-3. Resolve the credential before control-service startup and pass it in memory only.
-4. Add minimal IPC handlers for safe credential status, re-import, and clear. Restart only the owned control service after changes.
+3. Resolve the credential before control service startup and pass it in memory only.
+4. Add minimal IPC handlers for safe credential status, reimport, and clear. Restart only the owned control service after changes.
 5. Run the focused Electron tests until green.
 
 ## Task 3: Inject the provider contract and fix readiness
@@ -67,9 +67,9 @@ Files:
 
 Steps:
 
-1. Add typed API methods for credential status, re-import, and clear.
-2. Display saved/unsaved status, safe source label, and a concise shared-device warning.
-3. Add re-import and clear controls with disabled and error states.
+1. Add typed API methods for credential status, reimport, and clear.
+2. Display saved/unsaved status, safe source label, and a concise shared device warning.
+3. Add reimport and clear controls with disabled and error states.
 4. Refresh readiness and real model count after a credential change.
 5. Add UI tests for unavailable provider behavior and credential controls.
 6. Run `npm test -- --run` and `npm run lint` from `gui` until green.
@@ -85,9 +85,9 @@ Files:
 
 Steps:
 
-1. Document the FreeChain endpoint, first-run import order, DPAPI-backed persistence, clear/re-import behavior, shared-device warning, and troubleshooting states.
+1. Document the FreeChain endpoint, first run import order, DPAPI backed persistence, clear/reimport behavior, shared device warning, and troubleshooting states.
 2. Record the chat root cause and verification boundary without including keys or private data.
-3. Document that automated browsing remains policy-constrained and does not bypass anti-bot controls.
+3. Document that automated browsing remains policy constrained and does not bypass antibot controls.
 
 ## Task 6: Verify, package, install, and release
 
@@ -101,7 +101,7 @@ Steps:
 6. Confirm the encrypted credential artifact contains no plaintext and the assistant database/transcript contains no key.
 7. Merge the verified branch to `main` without rewriting history, push `main`, create signed release notes and tag `v2.0.0`, upload both assets and checksums, then verify the public tag, release, hashes, and repository privacy scan.
 
-## Task 7: Remediate release supply-chain blockers
+## Task 7: Remediate release supply chain blockers
 
 Files:
 
@@ -115,9 +115,9 @@ Files:
 
 Steps:
 
-1. Update the root optional control-plane tools to current reviewed versions and create a reproducible root lockfile.
-2. Require the latest compatible browser-use patch and re-audit the optional Python dependency surfaces.
-3. Exclude internal implementation plans, dependency tests, source maps, and dependency-owned workflow files from release payloads.
+1. Update the root optional control plane tools to current reviewed versions and create a reproducible root lockfile.
+2. Require the latest compatible browser-use patch and reaudit the optional Python dependency surfaces.
+3. Exclude internal implementation plans, dependency tests, source maps, and dependency owned workflow files from release payloads.
 4. Add a regression test for the packaging exclusions.
 5. Run root, GUI, only-cli, core Python, and optional Python audits and document any upstream residual that cannot be fixed compatibly.
 6. Run the full affected tests and rebuild both release artifacts from the remediated commit.

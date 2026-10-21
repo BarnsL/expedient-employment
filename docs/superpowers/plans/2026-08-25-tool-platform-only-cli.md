@@ -1,6 +1,6 @@
 # Tool Platform and only-cli Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Give the assistant and scheduled workflows a typed tool broker, the complete supported only-cli surface, and original MIT web intelligence and workflow capabilities.
 
@@ -90,7 +90,7 @@ git add job_pipeline/tool_broker.py job_pipeline/storage.py tests/test_tool_brok
 git commit -m "feat: add typed agent tool broker"
 ```
 
-### Task 2: Make only-cli a First-Class Bot Tool
+### Task 2: Make only-cli a First Class Bot Tool
 
 **Files:**
 - Create: `job_pipeline/integrations/only_cli.py`
@@ -102,7 +102,7 @@ git commit -m "feat: add typed agent tool broker"
 
 **Interfaces:**
 - Produces: `OnlyCliAdapter.available`, `OnlyCliAdapter.run`, `OnlyCliAdapter.tool_specs`, and broker names under `web.only_cli.*`
-- Consumes: an explicit CLI entry path, an application-owned session directory, and the access policy
+- Consumes: an explicit CLI entry path, an application owned session directory, and the access policy
 
 - [ ] **Step 1: Add failing Windows adapter tests**
 
@@ -125,7 +125,7 @@ Expected: FAIL because `OnlyCliAdapter` is missing.
 
 - [ ] **Step 3: Pin only-cli and implement the adapter**
 
-Add `@only-cli/oc` as a Git-revision-pinned production dependency. Resolve its bin entry during development and from packaged resources in production.
+Add `@only-cli/oc` as a Git revision pinned production dependency. Resolve its bin entry during development and from packaged resources in production.
 
 ```python
 SUPPORTED_COMMANDS = frozenset({
@@ -137,7 +137,7 @@ def run(self, command: str, args: Sequence[str], *, timeout_seconds: float = 30.
         raise OnlyCliCommandError("unsupported only-cli command")
 ```
 
-Use `shell=False`, a fixed executable and script path, a controlled environment, and application-owned session storage. Do not copy credentials from external browser profiles.
+Use `shell=False`, a fixed executable and script path, a controlled environment, and application owned session storage. Do not copy credentials from external browser profiles.
 
 - [ ] **Step 4: Run only-cli upstream, adapter, build, and audit checks**
 
@@ -150,7 +150,7 @@ npm --prefix gui run build
 npm --prefix gui audit --omit=dev
 ```
 
-Expected: adapter and build pass. Upstream Windows-only failures must either be fixed by the pinned revision or documented with adapter coverage proving the shipped path. Production audit must report no unresolved high or critical issue.
+Expected: adapter and build pass. Upstream Windows only failures must either be fixed by the pinned revision or documented with adapter coverage proving the shipped path. Production audit must report no unresolved high or critical issue.
 
 - [ ] **Step 5: Commit**
 
@@ -171,9 +171,9 @@ git commit -m "feat: expose only-cli to agent tools"
 - Produces: `SafeUrlPolicy`, `WebDocument`, `WebCache`, `WebIntelligence.fetch`, `WebIntelligence.extract`, `WebIntelligence.links`, and `WebIntelligence.crawl`
 - Consumes: injected HTTP transport for tests, access policy, SQLite cache, and broker context
 
-- [ ] **Step 1: Write failing trust-boundary tests**
+- [ ] **Step 1: Write failing trust boundary tests**
 
-Cover loopback and link-local rejection, userinfo rejection, redirect revalidation, DNS pin mismatch, content-length and streamed-byte caps, MIME validation, bounded crawl depth and pages, cache freshness, robots signal, challenge classification, and safe extraction.
+Cover loopback and link local rejection, userinfo rejection, redirect revalidation, DNS pin mismatch, content length and streamed byte caps, MIME validation, bounded crawl depth and pages, cache freshness, robots signal, challenge classification, and safe extraction.
 
 - [ ] **Step 2: Run the focused tests and confirm the missing package**
 
@@ -198,7 +198,7 @@ class WebIntelligence:
     def crawl(self, start_url: str, *, same_site: bool = True) -> list[WebDocument]: ...
 ```
 
-Implement with Python standard-library networking and HTML parsing. Do not add plugin loading, model downloads, or arbitrary child processes.
+Implement with Python standard library networking and HTML parsing. Do not add plugin loading, model downloads, or arbitrary child processes.
 
 - [ ] **Step 4: Run focused and full suites**
 
@@ -232,7 +232,7 @@ git commit -m "feat: add MIT web intelligence tools"
 
 - [ ] **Step 1: Write failing workflow tests**
 
-Cover schema versioning, unknown tool rejection, read-only dry run, variable interpolation without code execution, cancellation, retry bounds, resume from the last idempotent step, circuit breaker, dataset output, and exact approval for external actions.
+Cover schema versioning, unknown tool rejection, read only dry run, variable interpolation without code execution, cancellation, retry bounds, resume from the last idempotent step, circuit breaker, dataset output, and exact approval for external actions.
 
 - [ ] **Step 2: Run the tests and confirm missing behavior**
 

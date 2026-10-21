@@ -250,10 +250,12 @@ export interface ScheduleRecord {
   updated_at: string;
 }
 
-interface Api {
+export interface Api {
   doctor(): Promise<DoctorResult>;
   services(): Promise<ServicesMap>;
   servicesStart(service: StartableService): Promise<ServicesStartResponse>;
+  searchCancel(): Promise<Record<string, unknown>>;
+  browserRequest(method: 'GET' | 'POST', route: string, body?: Record<string, unknown>): Promise<Record<string, unknown>>;
   searchSpawn(args: SearchArgs): Promise<{ code: number | null; output: string }>;
   onSearchLog(cb: (p: SearchLogPayload) => void): () => void;
   jobsRead(): Promise<JobsResult>;
@@ -324,7 +326,11 @@ declare global {
   }
 }
 
-export const isDesktop = typeof window !== 'undefined' && !!window.api;
+let crewBridge: Api | undefined;
+const transport = { get api() { return crewBridge || (typeof window !== 'undefined' ? window.api : undefined); } };
+export let isDesktop = typeof window !== 'undefined' && !!window.api;
+export let isCrew = false;
+export function configureCrewBridge(value: Api | undefined) { crewBridge = value; isCrew = !!value; isDesktop = !!value || (typeof window !== 'undefined' && !!window.api); }
 
 // ── demo data for plain-browser preview ─────────────────────────────────────
 
@@ -385,101 +391,103 @@ const DEMO_JOBS: JobRow[] = [
 ];
 
 export const api: Api = {
-  doctor: () => window.api ? window.api.doctor() : Promise.resolve(DEMO_DOCTOR),
-  services: () => window.api ? window.api.services() : Promise.resolve(DEMO_SERVICES),
+  doctor: () => transport.api ? transport.api.doctor() : Promise.resolve(DEMO_DOCTOR),
+  services: () => transport.api ? transport.api.services() : Promise.resolve(DEMO_SERVICES),
   servicesStart: (service) =>
-    window.api
-      ? window.api.servicesStart(service)
+    transport.api
+      ? transport.api.servicesStart(service)
       : Promise.resolve(
           service === 'paperclip' || service === 'all'
             ? { paperclip: { up: false, error: 'desktop-only feature' } }
             : { resumeMatcher: { up: false, dockerMissing: true, error: 'desktop-only feature' } },
         ),
+  searchCancel: () => transport.api?.searchCancel() || Promise.reject(new Error('No active Crew search')),
+  browserRequest: (method, route, body) => transport.api?.browserRequest(method, route, body) || Promise.reject(new Error('Use the LLM Browser Crew app')),
   searchSpawn: (args) =>
-    window.api
-      ? window.api.searchSpawn(args)
+    transport.api
+      ? transport.api.searchSpawn(args)
       : Promise.resolve({ code: 0, output: 'demo run (browser preview)' }),
   onSearchLog: (cb) =>
-    window.api ? window.api.onSearchLog(cb) : (() => { void cb; return () => {}; }),
+    transport.api ? transport.api.onSearchLog(cb) : (() => { void cb; return () => {}; }),
   jobsRead: () =>
-    window.api ? window.api.jobsRead() : Promise.resolve({ exists: true, rows: DEMO_JOBS }),
+    transport.api ? transport.api.jobsRead() : Promise.resolve({ exists: true, rows: DEMO_JOBS }),
   reportOpen: () =>
-    window.api
-      ? window.api.reportOpen()
+    transport.api
+      ? transport.api.reportOpen()
       : Promise.resolve({ ok: false, error: 'desktop-only feature' }),
   applicationsRead: () =>
-    window.api
-      ? window.api.applicationsRead()
+    transport.api
+      ? transport.api.applicationsRead()
       : Promise.resolve({ exists: true, summary: {}, applications: [] }),
   applicationsRefresh: () =>
-    window.api
-      ? window.api.applicationsRefresh()
+    transport.api
+      ? transport.api.applicationsRefresh()
       : Promise.resolve({ code: 0, output: 'browser preview refreshed' }),
   applicationsFlag: (identityKey, flag) =>
-    window.api
-      ? window.api.applicationsFlag(identityKey, flag)
+    transport.api
+      ? transport.api.applicationsFlag(identityKey, flag)
       : Promise.resolve({ code: 0, output: 'browser preview updated' }),
   applicationsUndo: (identityKey) =>
-    window.api
-      ? window.api.applicationsUndo(identityKey)
+    transport.api
+      ? transport.api.applicationsUndo(identityKey)
       : Promise.resolve({ code: 0, output: 'browser preview restored' }),
   applicationsReportOpen: () =>
-    window.api
-      ? window.api.applicationsReportOpen()
+    transport.api
+      ? transport.api.applicationsReportOpen()
       : Promise.resolve({ ok: false, error: 'desktop-only feature' }),
   agentsList: () =>
-    window.api
-      ? window.api.agentsList()
+    transport.api
+      ? transport.api.agentsList()
       : Promise.resolve({
           online: false,
           agents: [],
           message: 'Paperclip offline — start it with scripts/paperclip-start-local.ps1',
         }),
   configRead: (name) =>
-    window.api
-      ? window.api.configRead(name)
+    transport.api
+      ? transport.api.configRead(name)
       : Promise.resolve({ exists: false, text: '', error: `desktop-only: cannot read ${name}` }),
   configWrite: (name, text) =>
-    window.api
-      ? window.api.configWrite(name, text)
+    transport.api
+      ? transport.api.configWrite(name, text)
       : Promise.resolve({ ok: false, error: `desktop-only: cannot write ${name}` }),
   sessionsRead: () =>
-    window.api
-      ? window.api.sessionsRead()
+    transport.api
+      ? transport.api.sessionsRead()
       : Promise.resolve({ exists: false, data: {} }),
   awbLaunch: () =>
-    window.api
-      ? window.api.awbLaunch()
+    transport.api
+      ? transport.api.awbLaunch()
       : Promise.resolve({ launched: false, bridgeUp: false, error: 'desktop-only feature' }),
   loginUrl: (siteKey) =>
-    window.api
-      ? window.api.loginUrl(siteKey)
+    transport.api
+      ? transport.api.loginUrl(siteKey)
       : Promise.resolve({ ok: false, error: `desktop-only: no login url for ${siteKey}` }),
   controlStatus: () =>
-    window.api
-      ? window.api.controlStatus()
+    transport.api
+      ? transport.api.controlStatus()
       : Promise.resolve({ ready: false, port: null, error: 'desktop-only feature' }),
   providerCredentialStatus: () =>
-    window.api
-      ? window.api.providerCredentialStatus()
+    transport.api
+      ? transport.api.providerCredentialStatus()
       : Promise.resolve(DEMO_CREDENTIAL_STATUS),
   providerCredentialReimport: () =>
-    window.api
-      ? window.api.providerCredentialReimport()
+    transport.api
+      ? transport.api.providerCredentialReimport()
       : Promise.resolve(DEMO_CREDENTIAL_STATUS),
   providerCredentialClear: () =>
-    window.api
-      ? window.api.providerCredentialClear()
+    transport.api
+      ? transport.api.providerCredentialClear()
       : Promise.resolve(DEMO_CREDENTIAL_STATUS),
   assistantProviders: () =>
-    window.api ? window.api.assistantProviders() : Promise.resolve([DEMO_PROVIDER]),
+    transport.api ? transport.api.assistantProviders() : Promise.resolve([DEMO_PROVIDER]),
   assistantModels: (provider) =>
-    window.api ? window.api.assistantModels(provider) : Promise.resolve([]),
+    transport.api ? transport.api.assistantModels(provider) : Promise.resolve([]),
   assistantConversations: () =>
-    window.api ? window.api.assistantConversations() : Promise.resolve([]),
+    transport.api ? transport.api.assistantConversations() : Promise.resolve([]),
   assistantCreate: (input) =>
-    window.api
-      ? window.api.assistantCreate(input)
+    transport.api
+      ? transport.api.assistantCreate(input)
       : Promise.resolve({
           id: 'demo-conversation',
           title: input.title || 'New conversation',
@@ -490,14 +498,14 @@ export const api: Api = {
           updated_at: new Date().toISOString(),
         }),
   assistantMessages: (conversationId) =>
-    window.api ? window.api.assistantMessages(conversationId) : Promise.resolve([]),
+    transport.api ? transport.api.assistantMessages(conversationId) : Promise.resolve([]),
   assistantQueue: (conversationId) =>
-    window.api ? window.api.assistantQueue(conversationId) : Promise.resolve([]),
+    transport.api ? transport.api.assistantQueue(conversationId) : Promise.resolve([]),
   assistantEvents: (conversationId) =>
-    window.api ? window.api.assistantEvents(conversationId) : Promise.resolve([]),
+    transport.api ? transport.api.assistantEvents(conversationId) : Promise.resolve([]),
   assistantAttach: (conversationId, input) =>
-    window.api
-      ? window.api.assistantAttach(conversationId, input)
+    transport.api
+      ? transport.api.assistantAttach(conversationId, input)
       : Promise.resolve({
           id: `demo-attachment-${Date.now()}`,
           conversation_id: conversationId,
@@ -508,8 +516,8 @@ export const api: Api = {
           created_at: new Date().toISOString(),
         }),
   assistantSend: (conversationId, input) =>
-    window.api
-      ? window.api.assistantSend(conversationId, input)
+    transport.api
+      ? transport.api.assistantSend(conversationId, input)
       : Promise.resolve({
           id: `demo-message-${Date.now()}`,
           conversation_id: conversationId,
@@ -522,44 +530,44 @@ export const api: Api = {
           updated_at: new Date().toISOString(),
         }),
   assistantRun: (conversationId) =>
-    window.api ? window.api.assistantRun(conversationId) : Promise.resolve(null),
+    transport.api ? transport.api.assistantRun(conversationId) : Promise.resolve(null),
   assistantEdit: (messageId, content) =>
-    window.api
-      ? window.api.assistantEdit(messageId, content)
+    transport.api
+      ? transport.api.assistantEdit(messageId, content)
       : Promise.reject(new Error('Editing queued messages requires the desktop app.')),
   assistantCancel: (messageId) =>
-    window.api
-      ? window.api.assistantCancel(messageId)
+    transport.api
+      ? transport.api.assistantCancel(messageId)
       : Promise.reject(new Error('Cancelling messages requires the desktop app.')),
   assistantRetry: (messageId) =>
-    window.api
-      ? window.api.assistantRetry(messageId)
+    transport.api
+      ? transport.api.assistantRetry(messageId)
       : Promise.reject(new Error('Retrying messages requires the desktop app.')),
   assistantClear: (conversationId) =>
-    window.api ? window.api.assistantClear(conversationId) : Promise.resolve({ cleared: true }),
-  toolsList: () => window.api ? window.api.toolsList() : Promise.resolve([]),
+    transport.api ? transport.api.assistantClear(conversationId) : Promise.resolve({ cleared: true }),
+  toolsList: () => transport.api ? transport.api.toolsList() : Promise.resolve([]),
   workflowsDryRun: (input) =>
-    window.api
-      ? window.api.workflowsDryRun(input)
+    transport.api
+      ? transport.api.workflowsDryRun(input)
       : Promise.resolve({ status: 'dry_run', input }),
   workflowsRun: (input) =>
-    window.api
-      ? window.api.workflowsRun(input)
+    transport.api
+      ? transport.api.workflowsRun(input)
       : Promise.resolve({ status: 'succeeded', input }),
-  schedulesList: () => window.api ? window.api.schedulesList() : Promise.resolve([]),
+  schedulesList: () => transport.api ? transport.api.schedulesList() : Promise.resolve([]),
   schedulesCreate: (input) =>
-    window.api
-      ? window.api.schedulesCreate(input)
+    transport.api
+      ? transport.api.schedulesCreate(input)
       : Promise.reject(new Error('Schedules require the desktop app.')),
   schedulesToggle: (scheduleId, enabled) =>
-    window.api
-      ? window.api.schedulesToggle(scheduleId, enabled)
+    transport.api
+      ? transport.api.schedulesToggle(scheduleId, enabled)
       : Promise.reject(new Error('Schedules require the desktop app.')),
-  schedulesRunDue: () => window.api ? window.api.schedulesRunDue() : Promise.resolve([]),
+  schedulesRunDue: () => transport.api ? transport.api.schedulesRunDue() : Promise.resolve([]),
   schedulesHistory: (scheduleId) =>
-    window.api ? window.api.schedulesHistory(scheduleId) : Promise.resolve([]),
+    transport.api ? transport.api.schedulesHistory(scheduleId) : Promise.resolve([]),
   schedulesInstallWake: () =>
-    window.api
-      ? window.api.schedulesInstallWake()
+    transport.api
+      ? transport.api.schedulesInstallWake()
       : Promise.resolve({ code: -1, output: 'Background wake requires the desktop app.' }),
 };

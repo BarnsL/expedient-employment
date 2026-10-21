@@ -9,7 +9,7 @@ import {
 import Composer from '@/components/assistant/Composer';
 import MessageQueue from '@/components/assistant/MessageQueue';
 import Transcript from '@/components/assistant/Transcript';
-import { api } from '@/lib/api';
+import { api, isCrew } from '@/lib/api';
 import type {
   AssistantAttachment,
   AssistantEvent,
@@ -49,6 +49,7 @@ function canUseProvider(readiness?: ProviderReadiness): boolean {
 }
 
 function credentialSourceLabel(source?: string): string {
+  if (source === 'Crew-managed FreeChain') return 'FreeChain in Crew';
   switch (source) {
     case 'saved':
       return 'Encrypted local storage';
@@ -280,7 +281,7 @@ export default function Assistant() {
       }
 
       const mutationSucceeded = action === 'reimport'
-        ? status.configured && status.saved
+        ? status.configured && (isCrew || status.saved)
         : !status.configured && !status.saved;
       if (!mutationSucceeded) {
         invalidateProviderRuntime(status);
@@ -566,7 +567,7 @@ export default function Assistant() {
                 </span>
               </p>
               <p className="mt-1 break-words text-slate-500">
-                The encrypted key is tied to the current Windows user and should be cleared before another person uses the same account.
+                {isCrew ? 'Provider credentials stay in the FreeChain Crew app. This workspace keeps its own conversations.' : 'The encrypted key is tied to the current Windows user and should be cleared before another person uses the same account.'}
               </p>
             </div>
             <div className="flex flex-wrap gap-2 lg:justify-end">
@@ -576,15 +577,15 @@ export default function Assistant() {
                 onClick={() => void mutateCredential('reimport')}
                 className="inline-flex h-9 items-center rounded-md border border-slate-700 px-3 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {credentialMutation === 'reimport' ? 'Re-importing local key' : 'Re-import local key'}
+                {isCrew ? (credentialMutation === 'reimport' ? 'Reconnecting' : 'Reconnect provider') : (credentialMutation === 'reimport' ? 'Re-importing local key' : 'Re-import local key')}
               </button>
               <button
                 type="button"
-                disabled={Boolean(credentialMutation) || loading || !credential?.saved}
+                disabled={Boolean(credentialMutation) || loading || (isCrew ? !credential?.configured : !credential?.saved)}
                 onClick={() => void mutateCredential('clear')}
                 className="inline-flex h-9 items-center rounded-md border border-slate-700 px-3 text-xs font-medium text-slate-300 hover:border-rose-800 hover:text-rose-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {credentialMutation === 'clear' ? 'Clearing saved key' : 'Clear saved key'}
+                {isCrew ? (credentialMutation === 'clear' ? 'Disconnecting' : 'Disconnect this workspace') : (credentialMutation === 'clear' ? 'Clearing saved key' : 'Clear saved key')}
               </button>
             </div>
           </div>

@@ -1,61 +1,72 @@
 # Expedient Employment
 
-## Resume and interview tools
-
-The Assistant now provides resume review, job evidence mapping, interview practice and a draft writing check. Generated prose uses clear wording without dash punctuation. Candidate facts remain subject to review, and application approval rules remain in place.
-
-See [the career guide](docs/CAREER.md) for agent instructions, local CLI examples, actual video transcript provenance and limits. The public repository contains no personal resume or private Discord transcript from this work.
-
 [![Tests](https://github.com/BarnsL/expedient-employment/actions/workflows/tests.yml/badge.svg)](https://github.com/BarnsL/expedient-employment/actions/workflows/tests.yml)
 [![Python](https://img.shields.io/badge/python-3.11%2B-15324a)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-cc8b19)](LICENSE)
 
-Expedient Employment is a local-first job research, ranking, application-drafting, and automation workspace. It combines a deterministic recruiting pipeline with a durable tool-using assistant, repeatable web workflows, and scheduled background runs.
+Expedient Employment is a job search agent that runs on your own computer. It finds jobs, scores them against your resume, prepares each application and can submit applications for you. You can use it as a desktop app, as a command line tool or as a Codex Crew app.
 
-The application prepares work for the user. It never submits an application, sends an employer-facing message, solves a challenge, or conceals automated traffic without an explicit action-specific approval path.
+## What it does
 
-## What is included
+1. **Find jobs.** It searches many job boards, removes duplicates, checks that each posting is live and records the employer site.
+2. **Score jobs.** It compares each job to your resume and shows the evidence for each score. Scoring works with no AI key.
+3. **Review jobs.** Agent B checks each good match again. It confirms that the posting is fresh, the employer domain is real and the location fits.
+4. **Prepare applications.** Agent C builds an application packet from your reviewed facts and your resume.
+5. **Submit applications.** When you turn on autonomy, Agent C fills and submits each eligible application with no action from you.
+6. **Track results.** It records each application, the employer confirmation and your later outcomes.
 
-- **Recruiting pipeline:** discovers, validates, deduplicates, verifies, scores, and ranks roles with explainable evidence.
-- **Application workspace:** records lifecycle state, outcomes, notes, evidence, packets, and undoable user decisions.
-- **Connection assistant:** supports provider and model selection, durable transcripts, queued and editable messages, retries, local image context, and tool calls.
-- **Agent tool broker:** exposes JSON-schema tools through typed policy classes, bounded execution, cancellation, output caps, content-free audit events, and exact approval digests.
-- **only-cli integration:** gives the assistant implemented read and navigation tools through a pinned MIT runtime, and gives the recruiting pipeline zero-setup public job discovery and page extraction. Optional fingerprint impersonation is not installed or packaged.
-- **Web Workbench:** runs validated DAG workflows with dry-run previews, bounded retries, resumable state, cancellation, circuit controls, interpolation, and structured results.
-- **Automations:** stores interval or daily schedules, leases due work safely, coalesces missed runs, records history, and can install a hidden per-user Windows wake task.
-- **Application drafts:** creates local draft packets only. Employer-facing execution is not registered as a tool.
-- **Control Anything surface:** centralizes provider readiness, tools, workflows, schedules, jobs, application state, and service health in one desktop application.
+It also reviews resumes, prepares interview practice and checks drafts for clear writing. See [the career guide](docs/CAREER.md).
+
+## Autonomous submission
+
+You turn autonomy on one time. After that, Agent C submits applications by itself.
+
+```powershell
+python -m job_pipeline autonomy enable --granted-by "Your Name" --days 30 --daily-cap 10 --min-score 70
+python -m job_pipeline agent-c-auto --resume C:\path\resume.docx
+```
+
+Each run does these steps for each verified job, best score first:
+
+1. It builds the application packet.
+2. It skips the job if a question has no answer in your reviewed facts. It never guesses an answer.
+3. It skips the job if the score is too low, the host is not allowed or the daily cap is reached.
+4. It writes a receipt that binds the policy to the exact packet. The receipt expires in one hour.
+5. It fills and submits the form, then reads the employer page.
+6. It marks the job as applied only when the employer shows a confirmation.
+
+Every attempt goes into `data/autonomous_submissions.jsonl`. To stop at once, run `python -m job_pipeline autonomy disable`. All receipts become invalid when you disable or change the policy. A policy expires after 90 days or less. The daily cap is 25 or less.
+
+Some steps still need you. The agent does not solve a CAPTCHA, create an account, pass a login check or answer a question that your facts do not cover. It skips that job and records the reason. See [docs/AUTONOMY.md](docs/AUTONOMY.md).
+
+## Codex Crew app
+
+The `crew/expedient-employment` folder holds the Crew app. It gives Crew agents the same jobs, applications, settings and assistant through an authenticated local API. A Crew agent can run, check or stop autonomy. Only you can turn autonomy on, from your own terminal.
+
+```powershell
+python crew/package_apps.py
+```
+
+The installed LLM Browser app provides the research browser for the Crew app. See [the Crew app guide](crew/expedient-employment/README.md).
 
 ## Safety model
 
-The app uses these default boundaries:
+1. Public page reads and local writes run automatically within set limits.
+2. Assistant tools that act on outside sites need an approval bound to the exact tool call.
+3. Scheduled workflows cannot use outside action tools.
+4. Autonomous submission needs your standing policy, a fresh receipt for each job and complete reviewed facts.
+5. Login walls and bot checks stop the agent. There is no CAPTCHA bypass, fingerprint spoofing, credential replay or hidden traffic.
+6. Contact details stay out of logs, reports and the submission ledger.
 
-1. Public-page reads and local writes can run automatically within their configured limits.
-2. External drafts can be prepared automatically but remain local.
-3. External actions require a digest bound to the exact tool call and arguments.
-4. Scheduled workflows reject external-action tools entirely.
-5. Access challenges, login walls, and bot checks stop automation and request visible user handoff.
-6. There is no CAPTCHA bypass, fingerprint spoofing, credential replay, stealth timing, or concealed form submission.
+See [docs/SECURITY.md](docs/SECURITY.md) and [docs/AUTOMATION.md](docs/AUTOMATION.md).
 
-See [docs/SECURITY.md](docs/SECURITY.md) for the threat model and [docs/AUTOMATION.md](docs/AUTOMATION.md) for workflow policy.
+## Install on Windows
 
-## Windows install
-
-Release output contains:
-
-- `ExpedientEmployment-Setup-2.0.0.exe`, a per-user installer.
-- `ExpedientEmployment-portable-2.0.0.zip`, a portable archive.
-
-The installer places the application under the current user's local programs directory and creates a Start Menu shortcut. It does not require administrator rights.
+The release has a per user installer and a portable archive. The installer puts the app in your local programs folder and adds a Start Menu shortcut. It does not need administrator rights.
 
 ## Run from source
 
-Requirements:
-
-- Python 3.11 or newer
-- Node.js 20 or newer
-- PowerShell on Windows
-- Docker only for the optional Resume-Matcher service
+You need Python 3.11 or newer, Node.js 20 or newer and PowerShell. Docker is necessary only for the optional Resume Matcher service.
 
 ```powershell
 pip install -e .
@@ -66,70 +77,43 @@ npm --prefix gui run only-cli:install
 npm --prefix gui run electron:dev
 ```
 
-The assistant can use a loopback OpenAI-compatible provider or an HTTPS provider configured by environment variable. Credentials stay in the main-process service environment and are never sent to the renderer.
+For browser submission, install the isolated browser runtime with `scripts/install-agent-integrations.ps1 -BrowserUse`.
 
-### Installed FreeChain assistant
-
-The installed FreeChain provider uses `http://127.0.0.1:4853/v1` with bearer authentication. The desktop first loads an encrypted record, then imports in order from the process `FREECHAIN_ACCESS_KEY`, an explicitly configured environment file, and the allowlisted per-user FreeChain environment file. No credential value is shown in the interface or stored in the repository.
-
-Electron `safeStorage` protects the saved record for the current Windows user, and Electron user data contains ciphertext only. Plaintext is limited to Electron main-process memory and the owned Python control child environment. Re-import replaces the saved record only after protected persistence succeeds. Clear reports success only when deletion succeeds or no record remains, and a successful change restarts only the owned control service.
-
-Before another person uses the same Windows account, clear the saved key. The Assistant reports credential missing, service unreachable, authentication failed, invalid model response, or ready with a real model count. It does not invent an `auto` model when recovery is required. See [docs/ASSISTANT.md](docs/ASSISTANT.md) for recovery steps and verification limits.
+The assistant can use a local OpenAI compatible provider or an HTTPS provider that you set in an environment variable. Keys stay in the main process. The interface never receives them. See [docs/ASSISTANT.md](docs/ASSISTANT.md).
 
 ## Useful commands
 
 ```powershell
-# Deterministic offline demo
-.\run.ps1 demo
-
-# Full Python suite
-python -m unittest discover -s tests
-
-# Recruiting scale acceptance run
-python -m job_pipeline.recruiting_acceptance --output reports/recruiting_acceptance.json
-
-# Renderer tests, lint, and production build
-npm --prefix gui test
-npm --prefix gui run lint
-npm --prefix gui run build
-
-# Electron boundary tests
-node --test gui/electron/*.test.cjs
-
-# Build Windows installer and portable archive
-powershell -NoProfile -ExecutionPolicy Bypass -File packaging/build-windows.ps1
+.\run.ps1 demo                                   # offline demo
+python -m unittest discover -s tests             # Python tests
+python crew/tests/test_expedient_parity.py       # Crew app tests
+npm --prefix gui test                            # interface tests
+npm --prefix gui run build                       # interface build
+python -m job_pipeline autonomy status           # autonomy state and attempts today
+python -m job_pipeline agent-c-auto --resume C:\path\resume.docx --dry-run
 ```
-
-The recruiting acceptance suite is synthetic and offline. It produces hundreds of eligible recruiting records across multiple seeded trials, verifies ranking precision, and asserts that bounded output contains no contact-shaped data.
 
 ## Architecture
 
 ```text
-Electron renderer
-    -> context-isolated preload with fixed IPC methods
-    -> Electron main process
-    -> authenticated loopback control service
-    -> assistant, broker, workflows, scheduler, pipeline, only-cli
-    -> local SQLite and content-addressed attachment storage
+Electron interface or Codex Crew app
+    -> authenticated local control service
+    -> assistant, tool broker, workflows, scheduler, pipeline
+    -> Agent A (find), Agent B (review), Agent C (apply)
+    -> local SQLite storage
 ```
 
-The renderer never receives the control-service bearer token. Webviews are restricted to approved job-board identity surfaces or the two fixed loopback service ports. Permissions and popups are denied by default.
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/ASSISTANT.md](docs/ASSISTANT.md), and [docs/APP_REFERENCE.md](docs/APP_REFERENCE.md) for implementation detail.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/APP_REFERENCE.md](docs/APP_REFERENCE.md).
 
 ## Source and licenses
 
-All original Expedient Employment source is MIT licensed. MIT source from [adeluna1/ai-job-search-pipeline](https://github.com/adeluna1/ai-job-search-pipeline) and [only-cli](https://github.com/only-cli/oc) is integrated at reviewed revisions recorded in [docs/PROVENANCE.md](docs/PROVENANCE.md).
-
-No Wigolo or Maxun source, tests, schemas, prompts, assets, or internal implementation structure is copied. Comparable product behaviors were implemented independently in original MIT modules from public product requirements.
-
-Third-party packages keep their own licenses. Optional AGPL software is a separate user-installed process and is not part of the MIT installer payload. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Original Expedient Employment source uses the MIT license. Reviewed MIT source from [adeluna1/ai-job-search-pipeline](https://github.com/adeluna1/ai-job-search-pipeline) and [only-cli](https://github.com/only-cli/oc) is recorded in [docs/PROVENANCE.md](docs/PROVENANCE.md). Third party packages keep their own licenses. Optional AGPL software runs as a separate process and is not in the installer. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Responsible use
 
-- Read only pages you are authorized to access and respect site terms and reasonable request rates.
-- Use visible browser handoff for login and challenge completion.
-- Review every application packet for truthfulness, eligibility, salary, location, and freshness.
-- Keep employer-facing actions under human approval.
+1. Use only sites that you can access, and obey their terms and rate limits.
+2. Keep your reviewed facts true and current. The agent submits what your facts say.
+3. Read the submission ledger often.
+4. Disable autonomy when you stop your job search.
 
 MIT License. See [LICENSE](LICENSE).

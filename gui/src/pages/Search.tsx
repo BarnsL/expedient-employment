@@ -4,16 +4,17 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { api, isDesktop } from '@/lib/api';
+import { api, isDesktop, isCrew } from '@/lib/api';
 import type { JobRow, SearchLogPayload } from '@/lib/api';
 
 export default function Search() {
-  const [query, setQuery] = useState('Recruiting Coordinator');
-  const [location, setLocation] = useState('San Francisco, CA');
+  const [query, setQuery] = useState(isCrew ? 'Microsoft Azure remote jobs' : 'Recruiting Coordinator');
+  const [location, setLocation] = useState(isCrew ? 'Remote' : 'San Francisco, CA');
   const [hoursOld, setHoursOld] = useState(720);
   const [resultsWanted, setResultsWanted] = useState(10);
-  const [concurrency, setConcurrency] = useState(3);
+  const [concurrency, setConcurrency] = useState(isCrew ? 1 : 3);
   const [running, setRunning] = useState(false);
+  const [error, setError] = useState('');
   const [log, setLog] = useState<string[]>([]);
   const [exitCode, setExitCode] = useState<number | null>(null);
   const [rows, setRows] = useState<JobRow[] | null>(null);
@@ -32,6 +33,7 @@ export default function Search() {
 
   const run = async () => {
     setRunning(true);
+    setError('');
     setLog([]);
     setExitCode(null);
     setRows(null);
@@ -40,6 +42,8 @@ export default function Search() {
       setExitCode(res.code);
       const jobs = await api.jobsRead();
       setRows(jobs.rows);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'Search failed. Saved jobs were preserved.');
     } finally {
       setRunning(false);
     }
@@ -48,6 +52,7 @@ export default function Search() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-slate-100">Search</h1>
+      {error && <p role="alert" className="text-rose-300">{error}</p>}
 
       <Card className="border-slate-800 bg-slate-900/60">
         <CardHeader>
@@ -58,6 +63,7 @@ export default function Search() {
             <div className="space-y-1 xl:col-span-2">
               <Label className="text-slate-300">Query</Label>
               <Input
+                aria-label="Search query"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 className="border-slate-700 bg-slate-950 text-slate-200"
@@ -66,6 +72,7 @@ export default function Search() {
             <div className="space-y-1">
               <Label className="text-slate-300">Location</Label>
               <Input
+                aria-label="Search location"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
                 className="border-slate-700 bg-slate-950 text-slate-200"
@@ -74,6 +81,7 @@ export default function Search() {
             <div className="space-y-1">
               <Label className="text-slate-300">Hours old</Label>
               <Input
+                aria-label="Maximum posting age in hours"
                 type="number"
                 value={hoursOld}
                 onChange={(e) => setHoursOld(Number(e.target.value))}
@@ -110,6 +118,7 @@ export default function Search() {
               <Play className="mr-2 h-4 w-4" />
               {running ? 'Running…' : 'Run search'}
             </Button>
+            {isCrew && running && <Button variant="outline" onClick={() => void api.searchCancel().catch(error => setLog(previous => [...previous, String(error)]))}>Cancel search</Button>}
             {!isDesktop && (
               <span className="text-xs text-slate-500">
                 desktop-only: launch via Electron to run the pipeline

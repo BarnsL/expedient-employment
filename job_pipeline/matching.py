@@ -216,6 +216,10 @@ def score_job(job: Job, profile: dict[str, Any], resume_text: str = "") -> Match
     experience_score, experience_gap = _experience_score(
         float(candidate.get("years_experience", 0)), job.required_years
     )
+    experience_unknown = candidate.get('years_experience_status') == 'not_provided_numeric_placeholder'
+    if experience_unknown:
+        experience_score = 50.0
+        experience_gap = 'Professional experience duration has not been confirmed; eligibility is unassessed.'
     location_score, location_reason = _location_score(
         job, candidate.get("preferred_locations", []), candidate.get("accepted_work_modes", [])
     )
@@ -279,6 +283,9 @@ def score_job(job: Job, profile: dict[str, Any], resume_text: str = "") -> Match
     if matched_responsibilities:
         reasons.append("Responsibility overlap: " + ", ".join(matched_responsibilities[:4]) + ".")
 
+    if experience_unknown:
+        label = 'unassessed'
+        recommendation = 'Search relevance only. Confirm professional tenure, location and qualifications before applying.'
     return MatchResult(
         job_id=job.id,
         deterministic_score=deterministic,
@@ -322,6 +329,8 @@ def apply_ai_score(
     model: str | None = None,
 ) -> MatchResult:
     """Blend one optional AI result into the baseline while retaining both scores."""
+    if result.fit_label == 'unassessed':
+        return result
     schema_path = data_dir / f".match-schema-{job.id}.json"
     write_json(schema_path, _ai_schema())
     candidate_context = json.dumps(profile.get("candidate", {}), ensure_ascii=False, indent=2)

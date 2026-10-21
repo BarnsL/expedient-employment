@@ -3,7 +3,8 @@ import { ArrowLeft, ArrowRight, ExternalLink, MonitorUp, RotateCw } from 'lucide
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { api, isDesktop } from '@/lib/api';
+import { api, isDesktop, isCrew } from '@/lib/api';
+import BrowserPanel from '@/crew/BrowserPanel';
 import type { WebviewElement } from '@/types/webview.d';
 
 interface SiteTab {
@@ -19,7 +20,7 @@ const TABS: SiteTab[] = [
   { key: 'indeed', label: 'Indeed', fallbackUrl: 'https://secure.indeed.com/auth' },
 ];
 
-export default function BrowserPage() {
+function DesktopBrowserPage() {
   const [active, setActive] = useState(TABS[0].key);
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [awbBusy, setAwbBusy] = useState(false);
@@ -172,4 +173,8 @@ export default function BrowserPage() {
       </Card>
     </div>
   );
+}
+
+export default function BrowserPage() {
+  return isCrew ? <BrowserPanel /> : <DesktopBrowserPage />;
 }

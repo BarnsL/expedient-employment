@@ -160,7 +160,8 @@ class OnlyCliAdapterTests(unittest.TestCase):
         self.assertIn("web.only_cli.site", specs)
         self.assertIn("web.only_cli.login", specs)
         self.assertEqual(specs["web.only_cli.open"].policy, ToolPolicy.READ)
-        self.assertEqual(specs["web.only_cli.login"].policy, ToolPolicy.LOCAL_WRITE)
+        self.assertEqual(specs["web.only_cli.login"].policy, ToolPolicy.EXTERNAL_ACTION)
+        self.assertEqual(specs["web.only_cli.site"].policy, ToolPolicy.EXTERNAL_ACTION)
         self.assertNotIn("web.only_cli.submit", specs)
 
 

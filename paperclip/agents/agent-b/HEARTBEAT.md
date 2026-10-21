@@ -13,7 +13,7 @@
 
    `--resume-matcher --resume-matcher-url URL --resume "$env:JOB_PIPELINE_RESUME" --allow-resume-upload`
 
-6. Read `data/agent_b_reviews.json` and verify every recommendation is supported by evidence. Label Resume-Matcher output as a tailoring-preview ATS assessment.
-7. Comment with deterministic score, optional ATS score, recommendation, live-verification status, matched evidence, gaps, blockers, and discrepancies.
+6. Read `data/agent_b_reviews.json` and verify every recommendation is supported by evidence. Label Resume-Matcher output as a tailoring preview ATS assessment.
+7. Comment with deterministic score, optional ATS score, recommendation, live verification status, matched evidence, gaps, blockers, and discrepancies.
 8. Update Agent C's issue with only `apply` job IDs and their URLs. Route `review` items to the board user and close out `skip` items.
 9. Mark done after the handoff is complete or blocked with a named unblock owner.

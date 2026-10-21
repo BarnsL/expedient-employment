@@ -4,7 +4,7 @@ Date: 2026-08-26
 
 ## Status
 
-Task 3 is implemented in the assigned worktree. The Electron child-environment contract, FreeChain defaults, authenticated readiness probe, direct model loading, and direct completion path are green in the focused suites.
+Task 3 is implemented in the assigned worktree. The Electron child environment contract, FreeChain defaults, authenticated readiness probe, direct model loading, and direct completion path are green in the focused suites.
 
 No real credential was accessed, printed, persisted, or used. Every credential value in tests is synthetic. No external service request was made.
 
@@ -24,12 +24,12 @@ No real credential was accessed, printed, persisted, or used. Every credential v
 - requires exactly `EXPEDIENT_PROVIDER_URL`, `EXPEDIENT_PROVIDER_KEY_ENV`, and the credential key named by `EXPEDIENT_PROVIDER_KEY_ENV`;
 - rejects all other own keys, including symbol keys;
 - requires a loopback HTTP URL whose path is exactly `/v1`, with no user information, query, or fragment;
-- validates the credential environment name with `^[A-Z][A-Z0-9_]{0,71}$` and prevents collision with manager-owned child variables;
-- requires a non-empty, single-line credential of at most 64 KiB;
+- validates the credential environment name with `^[A-Z][A-Z0-9_]{0,71}$` and prevents collision with manager owned child variables;
+- requires a nonempty, single line credential of at most 64 KiB;
 - returns a new validated object and merges it only into the new child environment;
 - leaves `process.env`, the caller object, command arguments, status objects, and logs unchanged.
 
-The Task 2 lifecycle remains in place. Validation runs before spawning, while stop, restart, blocked-child, timeout, and stale-event ownership behavior is unchanged.
+The Task 2 lifecycle remains in place. Validation runs before spawning, while stop, restart, blocked child, timeout, and stale event ownership behavior is unchanged.
 
 The default Python runtime now creates FreeChain with:
 
@@ -42,10 +42,10 @@ The default Python runtime now creates FreeChain with:
 - performs one authenticated `GET` to the exact `/models` endpoint for readiness;
 - reports only `ready`, `credential_configured`, `reachable`, `authenticated`, `model_count`, and a bounded constant detail;
 - classifies missing credentials, unreachable transport, authorization failure, invalid response, and ready state without returning raw exceptions or response content;
-- accepts only non-empty string model identifiers and caps the list at 200 entries;
+- accepts only nonempty string model identifiers and caps the list at 200 entries;
 - makes `models()` perform its own single authenticated request and raise a safe `ProviderError` when unavailable;
 - makes `complete()` check only credential configuration before its existing completion request, so it does not perform a redundant model probe;
-- converts completion transport failures to a constant safe error while preserving completion parsing and tool-call behavior.
+- converts completion transport failures to a constant safe error while preserving completion parsing and tool call behavior.
 
 ## TDD Evidence
 
@@ -73,7 +73,7 @@ Five readiness assertions failed because no authenticated model request occurred
 One default-runtime assertion failed because the URL still used port 8000.
 ```
 
-Added validation and safe-provider regression RED:
+Added validation and safe provider regression RED:
 
 ```text
 node --test electron/control-service.test.cjs
@@ -88,9 +88,9 @@ Ran 10 tests
 FAILED (failures=3)
 ```
 
-The new failures proved missing provider-environment validation, recursive model loading, incomplete readiness fields, and completion transport-detail exposure.
+The new failures proved missing provider environment validation, recursive model loading, incomplete readiness fields, and completion transport detail exposure.
 
-Completion direct-request RED after authenticated readiness was implemented:
+Completion direct request RED after authenticated readiness was implemented:
 
 ```text
 python -m unittest \
@@ -103,7 +103,7 @@ FAILED (failures=2)
 
 One failure showed the old completion guard returning the wrong safe error. The other recorded an unwanted `GET /models` before `POST /chat/completions`.
 
-Unknown symbol-key RED from self-review:
+Unknown symbol key RED from self review:
 
 ```text
 node --test --test-name-pattern="rejects malformed provider environments" electron/control-service.test.cjs
@@ -113,7 +113,7 @@ pass 0
 fail 1
 ```
 
-The symbol-keyed option reached the spawn double before validation used all own keys. The regression passed after replacing enumerable string-key inspection with `Reflect.ownKeys()`.
+The symbol keyed option reached the spawn double before validation used all own keys. The regression passed after replacing enumerable string key inspection with `Reflect.ownKeys()`.
 
 ## Verification Evidence
 
@@ -154,7 +154,7 @@ npx --no-install eslint electron/control-service.cjs electron/control-service.te
 No output. Every command exited 0.
 ```
 
-Whitespace and outgoing-scope checks, from the repository root:
+Whitespace and outgoing scope checks, from the repository root:
 
 ```text
 git diff --check
@@ -168,27 +168,27 @@ Literal secret-like matches: 0
 
 ## Security Review
 
-- The credential is present only in Electron main-process memory and the owned Python child's environment.
+- The credential is present only in Electron main process memory and the owned Python child's environment.
 - Provider overrides cannot enter command arguments, public status, renderer IPC, transcripts, SQLite, source literals, or logs through this change.
-- Validation rejects remote HTTP, loopback HTTPS, non-`/v1` paths, user information, query data, fragments, malformed names, unknown keys, empty credentials, control characters, oversized values, and collisions with manager-owned child variables.
-- Child-environment construction clones both the parent environment and validated provider values. Neither input object is mutated.
+- Validation rejects remote HTTP, loopback HTTPS, non-`/v1` paths, user information, query data, fragments, malformed names, unknown keys, empty credentials, control characters, oversized values, and collisions with manager owned child variables.
+- Child environment construction clones both the parent environment and validated provider values. Neither input object is mutated.
 - Readiness returns only fixed safe detail strings and numeric or boolean metadata. It does not return headers, URLs, response bodies, credentials, or exception text.
 - Model and completion transport failures are converted to safe `ProviderError` messages before the service can expose them.
-- Existing provider completion parsing, image handling, tool-call parsing, tool approvals, and loopback-only control API behavior were not changed.
-- No web automation or external-action approval policy changed.
+- Existing provider completion parsing, image handling, tool call parsing, tool approvals, and loopback only control API behavior were not changed.
+- No web automation or external action approval policy changed.
 
-## Self-Review
+## Self Review
 
 The final diff was checked against every Task 3 requirement and every caller of `ControlServiceManager.start()`, `readiness()`, `models()`, and `complete()`.
 
-The review found and fixed one issue: `Object.keys()` did not observe symbol-keyed unknown options. A failing regression was added before the implementation changed to `Reflect.ownKeys()`.
+The review found and fixed one issue: `Object.keys()` did not observe symbol keyed unknown options. A failing regression was added before the implementation changed to `Reflect.ownKeys()`.
 
 No unrelated source files were modified. Task 2 credential persistence and restart lifecycle changes remain intact and are covered by the combined Electron suite.
 
-## Concerns and Follow-up
+## Concerns and Follow up
 
 1. Live installed FreeChain authentication was not exercised because Task 3 verification intentionally used no real credential. Installed runtime recovery remains a release acceptance step.
-2. Task 4 still owns renderer readiness presentation, credential controls, model fallback removal, and the shared-device warning.
+2. Task 4 still owns renderer readiness presentation, credential controls, model fallback removal, and the shared device warning.
 3. The provider probe classifies known 401 and 403 responses as authorization failures and known connection errors as unreachable. Other transport failures are intentionally reported as an invalid response rather than exposing raw exception details.
 
 ## Fix Round 1: Ambient Environment and Exception Chains
@@ -203,16 +203,16 @@ Date: 2026-08-26
 ### Fixes
 
 - `ControlServiceManager` now accepts an injected environment for synthetic testing while defaulting to `process.env` in production.
-- A new child-environment sanitizer clones the source object, identifies a parent-selected credential name only when it matches the bounded provider-name pattern, and removes that key plus both provider configuration keys and `FREECHAIN_ACCESS_KEY`.
-- Manager-owned values and validated explicit `providerEnv` values are added only after sanitization.
+- A new child environment sanitizer clones the source object, identifies a parent selected credential name only when it matches the bounded provider name pattern, and removes that key plus both provider configuration keys and `FREECHAIN_ACCESS_KEY`.
+- Manager owned values and validated explicit `providerEnv` values are added only after sanitization.
 - The source environment object is never mutated. Unrelated ambient variables remain present in the child clone.
 - Model and completion transport handlers retain only a fixed safe detail or failure flag while inside the raw exception scope, then raise a new `ProviderError` after that scope ends.
-- Completion response and tool-call parsing also raise their safe replacements outside the caught exception scope.
+- Completion response and tool call parsing also raise their safe replacements outside the caught exception scope.
 - Readiness continues returning constant structured status metadata and retains no exception object.
 
 ### TDD evidence
 
-Ambient child-environment RED, from `gui`:
+Ambient child environment RED, from `gui`:
 
 ```text
 node --test --test-name-pattern="ambient provider values" electron/control-service.test.cjs
@@ -242,7 +242,7 @@ pass 1
 fail 0
 ```
 
-Full exception-chain RED, from the repository root:
+Full exception chain RED, from the repository root:
 
 ```text
 python -m unittest tests.test_assistant.AssistantTests.test_openai_provider_safe_failures_drop_transport_exception_chains
@@ -298,7 +298,7 @@ Em dash matches: 0
 
 - Omitted provider options now produce no active provider configuration in the child, even when the parent environment contains malicious synthetic values.
 - A valid bounded parent selector cannot smuggle its named credential variable into the child clone.
-- Explicit provider values still pass only after the existing URL, key-set, name, and credential validation.
+- Explicit provider values still pass only after the existing URL, key set, name, and credential validation.
 - The ambient source object and `process.env` are never mutated.
 - Full traversal of the safe model and completion exceptions finds no cause, context, synthetic credential, or raw transport detail.
 - No real credential, external request, renderer state, transcript, database, log, or command argument entered the verification path.
@@ -314,20 +314,20 @@ Date: 2026-08-26
 
 ### Finding addressed
 
-Windows treats environment variable names case-insensitively, but the Fix Round 1 sanitizer discovered and deleted provider keys with exact-case JavaScript lookups. Mixed-case aliases of both provider configuration keys, `FREECHAIN_ACCESS_KEY`, and the parent-selected credential variable survived in the child environment beside the validated uppercase values.
+Windows treats environment variable names case insensitively, but the Fix Round 1 sanitizer discovered and deleted provider keys with exact case JavaScript lookups. Mixed case aliases of both provider configuration keys, `FREECHAIN_ACCESS_KEY`, and the parent selected credential variable survived in the child environment beside the validated uppercase values.
 
 ### Fix
 
 - Selector keys are discovered by comparing their uppercase names with `EXPEDIENT_PROVIDER_KEY_ENV`.
 - Every bounded selector value is normalized to uppercase only for matching the selected credential variable.
-- Provider-key filtering compares each cloned environment name in uppercase against the normalized active provider set.
+- Provider key filtering compares each cloned environment name in uppercase against the normalized active provider set.
 - Unrelated names and values retain their original casing and content.
 - The source environment remains unchanged.
 - Explicit validated `providerEnv` values are merged after filtering and are the only active provider entries in the child.
 
 ### TDD evidence
 
-Mixed-case ambient alias RED, from `gui`:
+Mixed case ambient alias RED, from `gui`:
 
 ```text
 node --test --test-name-pattern="mixed-case ambient aliases" electron/control-service.test.cjs
@@ -375,7 +375,7 @@ Ran 18 tests in 4.016s
 OK
 ```
 
-Static and outgoing-scope gates:
+Static and outgoing scope gates:
 
 ```text
 node --check electron/control-service.cjs
@@ -393,10 +393,10 @@ Em dash matches: 0
 ### Security review
 
 - The regression uses only an injected synthetic environment and never reads or modifies the real parent credential state.
-- Mixed-case aliases cannot survive beside or override the explicit provider set on Windows.
-- A mixed-case selector value still identifies its credential variable for removal after bounded uppercase normalization.
+- Mixed case aliases cannot survive beside or override the explicit provider set on Windows.
+- A mixed case selector value still identifies its credential variable for removal after bounded uppercase normalization.
 - Unrelated variables preserve their exact original names and values.
-- Explicit provider validation remains case-sensitive and unchanged.
+- Explicit provider validation remains case sensitive and unchanged.
 - No real credential, external request, public status, command argument, renderer data, transcript, database, or log entered this fix round.
 
 ### Remaining concern

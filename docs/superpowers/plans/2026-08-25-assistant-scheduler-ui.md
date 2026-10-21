@@ -1,19 +1,19 @@
 # Assistant, Scheduler, and UI Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Deliver the full queued, image-aware, tool-using assistant and restart-safe scheduled job hunting through the Electron control center.
+**Goal:** Deliver the full queued, image aware, tool using assistant and restart safe scheduled job hunting through the Electron control center.
 
-**Architecture:** A loopback-authenticated Python control service owns conversations, schedules, tools, and SQLite state. Electron owns process lifecycle and narrow IPC. React renders the assistant and operations surfaces from typed APIs and receives bounded event streams.
+**Architecture:** A loopback authenticated Python control service owns conversations, schedules, tools, and SQLite state. Electron owns process lifecycle and narrow IPC. React renders the assistant and operations surfaces from typed APIs and receives bounded event streams.
 
 **Tech Stack:** Python standard library HTTP server and SQLite, Electron 43, React 19, TypeScript 5.9, Vitest, Testing Library
 
 ## Global Constraints
 
 - Scheduled discovery, scoring, extraction, and drafting may run unattended.
-- Employer-facing submissions and messages require exact action-time approval.
+- Employer facing submissions and messages require exact action time approval.
 - Image attachment data stays local unless the selected provider requires transmission and the user opted into it.
-- The screenshot is the assistant interaction reference and the current dark control-center identity remains intact.
+- The screenshot is the assistant interaction reference and the current dark control center identity remains intact.
 - All primary interactions are keyboard operable and announce status changes.
 
 ---
@@ -31,7 +31,7 @@
 
 - [ ] **Step 1: Write failing storage and provider tests**
 
-Cover conversation creation, ordered message queueing, edit-before-run, cancellation, retry, clear transcript, attachment count and byte caps, content digests, provider readiness, model listing, and an OpenAI-compatible tool-call response.
+Cover conversation creation, ordered message queueing, edit before run, cancellation, retry, clear transcript, attachment count and byte caps, content digests, provider readiness, model listing, and an OpenAI compatible tool call response.
 
 - [ ] **Step 2: Run tests and confirm missing module**
 
@@ -82,14 +82,14 @@ git commit -m "feat: add durable assistant conversations"
 - Modify: `tests/test_assistant.py`
 
 **Interfaces:**
-- Produces: bounded multi-turn tool execution with `tool_start`, `tool_result`, `approval_required`, `message_complete`, and `message_failed` events
+- Produces: bounded multiturn tool execution with `tool_start`, `tool_result`, `approval_required`, `message_complete`, and `message_failed` events
 - Consumes: provider tool calls and registered `web.only_cli.*` specifications
 
-- [ ] **Step 1: Write failing end-to-end queue tests**
+- [ ] **Step 1: Write failing end to end queue tests**
 
 Use a deterministic provider fixture that requests `web.only_cli.read`, receives the typed result, then returns an assistant answer. Assert that two queued messages run in order, cancellation prevents a third message from starting, and every tool event has an audit record.
 
-- [ ] **Step 2: Run the focused tool-loop test**
+- [ ] **Step 2: Run the focused tool loop test**
 
 Run: `python -m unittest tests.test_assistant.AssistantTests.test_only_cli_tool_call_runs_from_queue -v`
 
@@ -110,7 +110,7 @@ for round_index in range(MAX_TOOL_ROUNDS):
 raise AssistantError("tool round limit exceeded")
 ```
 
-Stop immediately on cancellation, approval-required, challenge, or provider circuit-breaker events.
+Stop immediately on cancellation, approval required, challenge, or provider circuit breaker events.
 
 - [ ] **Step 4: Run assistant, only-cli, broker, and full suites**
 
@@ -130,7 +130,7 @@ git add job_pipeline/assistant.py job_pipeline/tool_broker.py tests/test_assista
 git commit -m "feat: run only-cli through assistant queue"
 ```
 
-### Task 3: Add the Restart-Safe Scheduler
+### Task 3: Add the Restart Safe Scheduler
 
 **Files:**
 - Create: `job_pipeline/scheduler.py`
@@ -140,12 +140,12 @@ git commit -m "feat: run only-cli through assistant queue"
 - Modify: `job_pipeline/cli.py`
 
 **Interfaces:**
-- Produces: `Schedule`, `ScheduleService.create`, `ScheduleService.due`, `ScheduleService.run_due`, CLI `schedule run-due`, and an opt-in Windows Task Scheduler installer
+- Produces: `Schedule`, `ScheduleService.create`, `ScheduleService.due`, `ScheduleService.run_due`, CLI `schedule run-due`, and an opt in Windows Task Scheduler installer
 - Consumes: workflow runner and pipeline commands registered as local tools
 
 - [ ] **Step 1: Write failing recurrence and safety tests**
 
-Cover interval and daily recurrence, local timezone conversion, restart persistence, missed-run coalescing, enabled state, duplicate wake lock, read-only scheduled workflow, draft preparation, and rejection of external-action schedules.
+Cover interval and daily recurrence, local timezone conversion, restart persistence, missed run coalescing, enabled state, duplicate wake lock, read only scheduled workflow, draft preparation, and rejection of external action schedules.
 
 - [ ] **Step 2: Run focused tests and verify the missing scheduler**
 
@@ -165,7 +165,7 @@ ALLOWED_SCHEDULE_POLICIES = frozenset({
 def run_due(self, *, now: datetime, limit: int = 10) -> list[RunSummary]: ...
 ```
 
-The PowerShell installer registers one per-user hidden task that runs `python -m job_pipeline schedule run-due` with the repository or installed runtime path and never stores credentials in the task definition.
+The PowerShell installer registers one per user hidden task that runs `python -m job_pipeline schedule run-due` with the repository or installed runtime path and never stores credentials in the task definition.
 
 - [ ] **Step 4: Run scheduler, CLI, and full suites**
 
@@ -198,12 +198,12 @@ git commit -m "feat: add restart-safe job hunting scheduler"
 - Modify: `gui/src/lib/api.ts`
 
 **Interfaces:**
-- Produces: loopback `/v1` JSON routes, server-sent event stream, owned-process lifecycle, and typed preload methods
+- Produces: loopback `/v1` JSON routes, server sent event stream, owned process lifecycle, and typed preload methods
 - Consumes: assistant, schedules, tools, jobs, applications, and workflows
 
 - [ ] **Step 1: Write failing authentication and IPC tests**
 
-Cover missing token, invalid token, non-loopback bind rejection, body-size cap, invalid JSON, unknown route, event-stream redaction, service child shutdown, and preload method allowlist.
+Cover missing token, invalid token, nonloopback bind rejection, body size cap, invalid JSON, unknown route, event stream redaction, service child shutdown, and preload method allowlist.
 
 - [ ] **Step 2: Run Python and Node service tests**
 
@@ -268,12 +268,12 @@ git commit -m "feat: bridge assistant service into Electron"
 - Modify: `gui/package.json`
 
 **Interfaces:**
-- Produces: navigation routes and accessible assistant, schedule, workflow, only-cli, extraction, and run-history controls
+- Produces: navigation routes and accessible assistant, schedule, workflow, only-cli, extraction, and run history controls
 - Consumes: typed `api` methods and event records from Task 4
 
 - [ ] **Step 1: Install the UI test harness and write failing interaction tests**
 
-Tests must cover provider and model selection, readiness refresh, Enter and Shift+Enter, queue order, edit, cancel, retry, image attachment removal, tool-event rendering, approval card, new conversation, clear transcript, schedule enable/disable, workflow dry run, only-cli command selection, and responsive overflow.
+Tests must cover provider and model selection, readiness refresh, Enter and Shift+Enter, queue order, edit, cancel, retry, image attachment removal, tool event rendering, approval card, new conversation, clear transcript, schedule enable/disable, workflow dry run, only-cli command selection, and responsive overflow.
 
 - [ ] **Step 2: Run the focused UI tests**
 
@@ -281,9 +281,9 @@ Run: `npm --prefix gui test -- --run gui/src/components/assistant/assistant.test
 
 Expected: FAIL because the components and test script do not exist.
 
-- [ ] **Step 3: Implement the Operate-mode surfaces**
+- [ ] **Step 3: Implement the Operate mode surfaces**
 
-Preserve the dark control-center world. The assistant opens with provider and model controls, readiness chips, transcript, message queue, image attachment strip, keyboard hints, and one clear send action. Tool events remain compact by default and expand for details. External-action approval cards remain visually distinct from ordinary tool output.
+Preserve the dark control center world. The assistant opens with provider and model controls, readiness chips, transcript, message queue, image attachment strip, keyboard hints, and one clear send action. Tool events remain compact by default and expand for details. External action approval cards remain visually distinct from ordinary tool output.
 
 - [ ] **Step 4: Run UI tests, detector, build, lint, and full backend tests**
 

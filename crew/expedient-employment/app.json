@@ -1,0 +1,60 @@
+{
+  "name": "expedient-employment",
+  "displayName": "Expedient Employment",
+  "version": "2.2.0",
+  "description": "Find jobs, review them, prepare applications and submit them under your own autonomy policy in Crew.",
+  "author": "Purple Industries",
+  "license": "MIT",
+  "iconPath": "ui/icon.svg",
+  "minCodexCrewVersion": "0.7.0",
+  "backend": {
+    "entryPoint": "backend/server.py",
+    "type": "python",
+    "port": "auto",
+    "healthCheck": "/health",
+    "hooks": {
+      "on_startup": "backend.lifecycle:on_startup",
+      "on_shutdown": "backend.lifecycle:on_shutdown"
+    }
+  },
+  "permissions": {
+    "api": [
+      "/apps/expedient-employment/api",
+      "/apps/expedient-employment/api/*"
+    ],
+    "storage": true,
+    "network": true,
+    "spawn": false,
+    "cron": false
+  },
+  "skills": [
+    "skills/expedient-employment"
+  ],
+  "ui": {
+    "entry": "index.mjs",
+    "pages": [
+      {
+        "route": "/apps/expedient-employment",
+        "label": "Expedient Employment",
+        "iconUrl": "icon.svg"
+      }
+    ]
+  },
+  "platform": {
+    "os": [
+      "windows",
+      "linux"
+    ],
+    "arch": [
+      "x86_64",
+      "arm64"
+    ],
+    "requiresDesktopApp": false,
+    "installMode": "server"
+  },
+  "configuration": [
+    "Use Settings to confirm your location, qualifications and remote work preferences.",
+    "The installed LLM Browser app owns research browser sessions.",
+    "Turn on autonomous submission one time from your terminal. A Crew agent can run or stop it, but cannot turn it on."
+  ]
+}

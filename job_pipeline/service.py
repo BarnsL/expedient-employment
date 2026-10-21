@@ -21,6 +21,7 @@ from urllib.parse import unquote, urlsplit
 from .app_tools import JobPipelineToolAdapter
 from .assistant import ConversationService, OpenAICompatibleProvider
 from .integrations.only_cli import OnlyCliAdapter
+from .integrations.agent_reach import AgentReachAdapter
 from .scheduler import Recurrence, ScheduleService
 from .tool_broker import ToolBroker
 from .util import redact_secrets
@@ -366,7 +367,7 @@ def build_default_runtime(project_root: Path, data_root: Path) -> ControlRuntime
         session_dir=data_root / "only-cli",
     )
     job_tools = JobPipelineToolAdapter(project_root)
-    broker = ToolBroker([*only_cli.tool_specs(), *job_tools.tool_specs()])
+    broker = ToolBroker([*only_cli.tool_specs(), *job_tools.tool_specs(), *AgentReachAdapter().tool_specs()])
     provider_url = os.environ.get("EXPEDIENT_PROVIDER_URL", "http://127.0.0.1:4853/v1")
     provider_key_env = os.environ.get("EXPEDIENT_PROVIDER_KEY_ENV", "FREECHAIN_ACCESS_KEY")
     providers = {

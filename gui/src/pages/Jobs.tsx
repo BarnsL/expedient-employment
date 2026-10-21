@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowUpDown } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { api } from '@/lib/api';
+import { api, isCrew } from '@/lib/api';
 import type { JobRow } from '@/lib/api';
 
 const COLUMNS = [
@@ -22,6 +22,7 @@ type SortDir = 'asc' | 'desc';
 export default function Jobs() {
   const [rows, setRows] = useState<JobRow[]>([]);
   const [exists, setExists] = useState(true);
+  const [error, setError] = useState('');
   const [sortKey, setSortKey] = useState<string>('score');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
@@ -29,7 +30,7 @@ export default function Jobs() {
     api.jobsRead().then((res) => {
       setRows(res.rows);
       setExists(res.exists);
-    });
+    }).catch(failure => setError(failure instanceof Error ? failure.message : 'Saved jobs could not be loaded. Retry after checking app status.'));
   }, []);
 
   const sorted = useMemo(() => {
@@ -62,10 +63,11 @@ export default function Jobs() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-slate-100">Jobs</h1>
+      {error && <p role="alert" className="text-rose-300">{error}</p>}
       <Card className="border-slate-800 bg-slate-900/60">
         <CardHeader>
           <CardTitle className="text-slate-200">
-            reports/job_matches.csv {!exists && '(not found yet — run a search)'}
+            {isCrew ? 'Saved jobs' : 'reports/job_matches.csv'} {!exists && '(run a search to add jobs)'}
           </CardTitle>
         </CardHeader>
         <CardContent>

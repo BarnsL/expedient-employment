@@ -1,7 +1,7 @@
 {
   "name": "expedient-employment-control-plane",
   "private": true,
-  "version": "2.0.0",
+  "version": "2.2.0",
   "license": "MIT",
   "description": "Pinned optional control plane for Expedient Employment agents and approval-gated browser workflows.",
   "devDependencies": {
