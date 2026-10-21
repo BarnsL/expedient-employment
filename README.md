@@ -1,7 +1,13 @@
 # Expedient Employment
 
+## Resume and interview tools
+
+The Assistant now provides resume review, job evidence mapping, interview practice and a draft writing check. Generated prose uses clear wording without dash punctuation. Candidate facts remain subject to review, and application approval rules remain in place.
+
+See [the career guide](docs/CAREER.md) for agent instructions, local CLI examples, actual video transcript provenance and limits. The public repository contains no personal resume or private Discord transcript from this work.
+
 [![Tests](https://github.com/BarnsL/expedient-employment/actions/workflows/tests.yml/badge.svg)](https://github.com/BarnsL/expedient-employment/actions/workflows/tests.yml)
-[![Python](https://img.shields.io/badge/python-3.10%2B-15324a)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.11%2B-15324a)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-cc8b19)](LICENSE)
 
 Expedient Employment is a local-first job research, ranking, application-drafting, and automation workspace. It combines a deterministic recruiting pipeline with a durable tool-using assistant, repeatable web workflows, and scheduled background runs.
@@ -46,7 +52,7 @@ The installer places the application under the current user's local programs dir
 
 Requirements:
 
-- Python 3.10 or newer
+- Python 3.11 or newer
 - Node.js 20 or newer
 - PowerShell on Windows
 - Docker only for the optional Resume-Matcher service

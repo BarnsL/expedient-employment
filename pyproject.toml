@@ -3,7 +3,7 @@ name = "expedient-employment"
 version = "2.0.1"
 description = "A local-first job discovery, verification, drafting, scheduling, and tool-using assistant application."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { file = "LICENSE" }
 authors = [{ name = "Expedient Employment contributors" }]
 keywords = ["job-search", "recruiting", "webclaw", "paperclip", "agents", "resume-matching", "ai"]
@@ -12,7 +12,6 @@ classifiers = [
   "Environment :: Console",
   "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
 ]

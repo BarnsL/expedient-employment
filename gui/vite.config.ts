@@ -8,6 +8,7 @@ export default defineConfig({
   base: './',
   plugins: [inspectAttr(), react()],
   server: {
+    host: '127.0.0.1',
     port: 7100,
   },
   resolve: {

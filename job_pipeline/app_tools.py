@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from .career import review_resume, prepare_interview, check_draft
 from .tool_broker import ToolContext, ToolPolicy, ToolResult, ToolSpec
 from .util import redact_secrets
 
@@ -154,6 +155,38 @@ class JobPipelineToolAdapter:
             return ToolResult(data=result.to_dict(), summary=f"Application draft: {result.status}")
 
         return (
+            ToolSpec(
+                name="career.resume.review",
+                description="Review supplied resume text against a role and posting. Returns writing findings and possible evidence matches, never verified eligibility. No files or network are accessed.",
+                policy=ToolPolicy.READ,
+                input_schema={"type": "object", "properties": {
+                    "resume_text": {"type": "string", "minLength": 1, "maxLength": 32000},
+                    "job_description": {"type": "string", "maxLength": 32000},
+                    "target_role": {"type": "string", "maxLength": 200}},
+                    "required": ["resume_text"], "additionalProperties": False},
+                handler=lambda args, _ctx: ToolResult(data=review_resume(**args), summary="Resume review prepared. Facts need review."),
+            ),
+            ToolSpec(
+                name="career.interview.prepare",
+                description="Prepare twelve role based practice questions, an evidence map and a review rubric. Ask next_question and wait for the answer. Never invent candidate stories.",
+                policy=ToolPolicy.READ,
+                input_schema={"type": "object", "properties": {
+                    "role": {"type": "string", "minLength": 1, "maxLength": 200},
+                    "job_description": {"type": "string", "minLength": 1, "maxLength": 32000},
+                    "evidence": {"type": "array", "maxItems": 20, "items": {"type": "string", "minLength": 1, "maxLength": 2000}}},
+                    "required": ["role", "job_description", "evidence"], "additionalProperties": False},
+                handler=lambda args, _ctx: ToolResult(data=prepare_interview(**args), summary="Interview practice prepared. Ask one question."),
+            ),
+            ToolSpec(
+                name="career.draft.check",
+                description="Check supplied prose and metrics against supplied evidence. Suggest plain punctuation while preserving URLs, code and quotations. Human factual review remains required.",
+                policy=ToolPolicy.READ,
+                input_schema={"type": "object", "properties": {
+                    "draft": {"type": "string", "minLength": 1, "maxLength": 32000},
+                    "evidence": {"type": "array", "maxItems": 20, "items": {"type": "string", "minLength": 1, "maxLength": 2000}}},
+                    "required": ["draft", "evidence"], "additionalProperties": False},
+                handler=lambda args, _ctx: ToolResult(data=check_draft(**args), summary="Draft checked. Personal claims still need review."),
+            ),
             ToolSpec(
                 name="jobs.pipeline.run",
                 description=(

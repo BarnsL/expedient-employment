@@ -32,6 +32,8 @@ from .tool_broker import (
     ToolContext,
 )
 from .util import redact_secrets, utc_now
+from .resume import redact_contact_details
+from .writing import ASSISTANT_POLICY, polish_prose
 
 
 MAX_TOOL_ROUNDS = 8
@@ -1003,7 +1005,7 @@ class ConversationService:
             (
                 identifier,
                 message.conversation_id,
-                content[:100_000],
+                polish_prose(redact_contact_details(redact_secrets(content[:100_000]))),
                 self._next_sequence(message.conversation_id),
                 now,
                 now,
@@ -1027,7 +1029,7 @@ class ConversationService:
             self._event(conversation_id, message.id, "message_start", {})
             request = AssistantRequest(
                 model=conversation.model,
-                messages=self._history(message),
+                messages=({"role": "system", "content": ASSISTANT_POLICY}, *self._history(message)),
                 tools=tuple(self.broker.list_tools()),
                 attachments=tuple(self.attachments(message.id)),
                 allow_image_upload=conversation.allow_image_upload,

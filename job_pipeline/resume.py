@@ -25,12 +25,21 @@ def extract_docx_text(path: Path) -> str:
         raise ResumeError("The resume must be a .docx file.")
 
     try:
+        if path.stat().st_size > 16 * 1024 * 1024:
+            raise ResumeError("Word document exceeds the file size limit.")
         with zipfile.ZipFile(path) as archive:
-            xml = archive.read("word/document.xml")
+            info = archive.getinfo("word/document.xml")
+            if info.file_size > 4 * 1024 * 1024:
+                raise ResumeError("Word document text exceeds the size limit.")
+            with archive.open(info) as document:
+                xml = document.read(4 * 1024 * 1024 + 1)
+            if len(xml) > 4 * 1024 * 1024:
+                raise ResumeError("Word document text exceeds the size limit.")
     except (zipfile.BadZipFile, KeyError, OSError) as exc:
         raise ResumeError(f"Could not read DOCX: {exc}") from exc
 
-    if b"<!DOCTYPE" in xml.upper() or b"<!ENTITY" in xml.upper():
+    declaration_probe = xml.replace(b"\x00", b"").upper()
+    if b"<!DOCTYPE" in declaration_probe or b"<!ENTITY" in declaration_probe:
         raise ResumeError("Word document XML declarations are not allowed.")
 
     try:
